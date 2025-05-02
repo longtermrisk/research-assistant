@@ -1,0 +1,985 @@
+# MCP Python SDK
+
+Python implementation of the Model Context Protocol (MCP)
+
+## Overview
+
+The Model Context Protocol allows applications to provide context for LLMs in a standardized way, separating the concerns of providing context from the actual LLM interaction. This Python SDK implements the full MCP specification, making it easy to:
+
+- Build MCP clients that can connect to any MCP server
+- Create MCP servers that expose resources, prompts and tools
+- Use standard transports like stdio and SSE
+- Handle all MCP protocol messages and lifecycle events
+
+## Installation
+
+### Adding MCP to your python project
+
+We recommend using [uv](https://docs.astral.sh/uv/) to manage your Python projects. 
+
+If you haven't created a uv-managed project yet, create one:
+
+   ```bash
+   uv init mcp-server-demo
+   cd mcp-server-demo
+   ```
+
+   Then add MCP to your project dependencies:
+
+   ```bash
+   uv add "mcp[cli]"
+   ```
+
+Alternatively, for projects using pip for dependencies:
+```bash
+pip install "mcp[cli]"
+```
+
+### Running the standalone MCP development tools
+
+To run the mcp command with uv:
+
+```bash
+uv run mcp
+```
+
+## Quickstart
+
+Let's create a simple MCP server that exposes a calculator tool and some data:
+
+```python
+# server.py
+from mcp.server.fastmcp import FastMCP
+
+# Create an MCP server
+mcp = FastMCP("Demo")
+
+
+# Add an addition tool
+@mcp.tool()
+def add(a: int, b: int) -> int:
+    """Add two numbers"""
+    return a + b
+
+
+# Add a dynamic greeting resource
+@mcp.resource("greeting://{name}")
+def get_greeting(name: str) -> str:
+    """Get a personalized greeting"""
+    return f"Hello, {name}!"
+```
+
+You can install this server in [Claude Desktop](https://claude.ai/download) and interact with it right away by running:
+```bash
+mcp install server.py
+```
+
+Alternatively, you can test it with the MCP Inspector:
+```bash
+mcp dev server.py
+```
+
+## What is MCP?
+
+The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) lets you build servers that expose data and functionality to LLM applications in a secure, standardized way. Think of it like a web API, but specifically designed for LLM interactions. MCP servers can:
+
+- Expose data through **Resources** (think of these sort of like GET endpoints; they are used to load information into the LLM's context)
+- Provide functionality through **Tools** (sort of like POST endpoints; they are used to execute code or otherwise produce a side effect)
+- Define interaction patterns through **Prompts** (reusable templates for LLM interactions)
+- And more!
+
+## Core Concepts
+
+### Server
+
+The FastMCP server is your core interface to the MCP protocol. It handles connection management, protocol compliance, and message routing:
+
+```python
+# Add lifespan support for startup/shutdown with strong typing
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+
+from fake_database import Database  # Replace with your actual DB type
+
+from mcp.server.fastmcp import Context, FastMCP
+
+# Create a named server
+mcp = FastMCP("My App")
+
+# Specify dependencies for deployment and development
+mcp = FastMCP("My App", dependencies=["pandas", "numpy"])
+
+
+@dataclass
+class AppContext:
+    db: Database
+
+
+@asynccontextmanager
+async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
+    """Manage application lifecycle with type-safe context"""
+    # Initialize on startup
+    db = await Database.connect()
+    try:
+        yield AppContext(db=db)
+    finally:
+        # Cleanup on shutdown
+        await db.disconnect()
+
+
+# Pass lifespan to server
+mcp = FastMCP("My App", lifespan=app_lifespan)
+
+
+# Access type-safe lifespan context in tools
+@mcp.tool()
+def query_db(ctx: Context) -> str:
+    """Tool that uses initialized resources"""
+    db = ctx.request_context.lifespan_context.db
+    return db.query()
+```
+
+### Resources
+
+Resources are how you expose data to LLMs. They're similar to GET endpoints in a REST API - they provide data but shouldn't perform significant computation or have side effects:
+
+```python
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("My App")
+
+
+@mcp.resource("config://app")
+def get_config() -> str:
+    """Static configuration data"""
+    return "App configuration here"
+
+
+@mcp.resource("users://{user_id}/profile")
+def get_user_profile(user_id: str) -> str:
+    """Dynamic user data"""
+    return f"Profile data for user {user_id}"
+```
+
+### Tools
+
+Tools let LLMs take actions through your server. Unlike resources, tools are expected to perform computation and have side effects:
+
+```python
+import httpx
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("My App")
+
+
+@mcp.tool()
+def calculate_bmi(weight_kg: float, height_m: float) -> float:
+    """Calculate BMI given weight in kg and height in meters"""
+    return weight_kg / (height_m**2)
+
+
+@mcp.tool()
+async def fetch_weather(city: str) -> str:
+    """Fetch current weather for a city"""
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"https://api.weather.com/{city}")
+        return response.text
+```
+
+### Prompts
+
+Prompts are reusable templates that help LLMs interact with your server effectively:
+
+```python
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.prompts import base
+
+mcp = FastMCP("My App")
+
+
+@mcp.prompt()
+def review_code(code: str) -> str:
+    return f"Please review this code:\n\n{code}"
+
+
+@mcp.prompt()
+def debug_error(error: str) -> list[base.Message]:
+    return [
+        base.UserMessage("I'm seeing this error:"),
+        base.UserMessage(error),
+        base.AssistantMessage("I'll help debug that. What have you tried so far?"),
+    ]
+```
+
+### Images
+
+FastMCP provides an `Image` class that automatically handles image data:
+
+```python
+from mcp.server.fastmcp import FastMCP, Image
+from PIL import Image as PILImage
+
+mcp = FastMCP("My App")
+
+
+@mcp.tool()
+def create_thumbnail(image_path: str) -> Image:
+    """Create a thumbnail from an image"""
+    img = PILImage.open(image_path)
+    img.thumbnail((100, 100))
+    return Image(data=img.tobytes(), format="png")
+```
+
+### Context
+
+The Context object gives your tools and resources access to MCP capabilities:
+
+```python
+from mcp.server.fastmcp import FastMCP, Context
+
+mcp = FastMCP("My App")
+
+
+@mcp.tool()
+async def long_task(files: list[str], ctx: Context) -> str:
+    """Process multiple files with progress tracking"""
+    for i, file in enumerate(files):
+        ctx.info(f"Processing {file}")
+        await ctx.report_progress(i, len(files))
+        data, mime_type = await ctx.read_resource(f"file://{file}")
+    return "Processing complete"
+```
+
+## Running Your Server
+
+### Development Mode
+
+The fastest way to test and debug your server is with the MCP Inspector:
+
+```bash
+mcp dev server.py
+
+# Add dependencies
+mcp dev server.py --with pandas --with numpy
+
+# Mount local code
+mcp dev server.py --with-editable .
+```
+
+### Claude Desktop Integration
+
+Once your server is ready, install it in Claude Desktop:
+
+```bash
+mcp install server.py
+
+# Custom name
+mcp install server.py --name "My Analytics Server"
+
+# Environment variables
+mcp install server.py -v API_KEY=abc123 -v DB_URL=postgres://...
+mcp install server.py -f .env
+```
+
+### Direct Execution
+
+For advanced scenarios like custom deployments:
+
+```python
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("My App")
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+Run it with:
+```bash
+python server.py
+# or
+mcp run server.py
+```
+
+### Mounting to an Existing ASGI Server
+
+You can mount the SSE server to an existing ASGI server using the `sse_app` method. This allows you to integrate the SSE server with other ASGI applications.
+
+```python
+from starlette.applications import Starlette
+from starlette.routing import Mount, Host
+from mcp.server.fastmcp import FastMCP
+
+
+mcp = FastMCP("My App")
+
+# Mount the SSE server to the existing ASGI server
+app = Starlette(
+    routes=[
+        Mount('/', app=mcp.sse_app()),
+    ]
+)
+
+# or dynamically mount as host
+app.router.routes.append(Host('mcp.acme.corp', app=mcp.sse_app()))
+```
+
+For more information on mounting applications in Starlette, see the [Starlette documentation](https://www.starlette.io/routing/#submounting-routes).
+
+## Examples
+
+### Echo Server
+
+A simple server demonstrating resources, tools, and prompts:
+
+```python
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("Echo")
+
+
+@mcp.resource("echo://{message}")
+def echo_resource(message: str) -> str:
+    """Echo a message as a resource"""
+    return f"Resource echo: {message}"
+
+
+@mcp.tool()
+def echo_tool(message: str) -> str:
+    """Echo a message as a tool"""
+    return f"Tool echo: {message}"
+
+
+@mcp.prompt()
+def echo_prompt(message: str) -> str:
+    """Create an echo prompt"""
+    return f"Please process this message: {message}"
+```
+
+### SQLite Explorer
+
+A more complex example showing database integration:
+
+```python
+import sqlite3
+
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("SQLite Explorer")
+
+
+@mcp.resource("schema://main")
+def get_schema() -> str:
+    """Provide the database schema as a resource"""
+    conn = sqlite3.connect("database.db")
+    schema = conn.execute("SELECT sql FROM sqlite_master WHERE type='table'").fetchall()
+    return "\n".join(sql[0] for sql in schema if sql[0])
+
+
+@mcp.tool()
+def query_data(sql: str) -> str:
+    """Execute SQL queries safely"""
+    conn = sqlite3.connect("database.db")
+    try:
+        result = conn.execute(sql).fetchall()
+        return "\n".join(str(row) for row in result)
+    except Exception as e:
+        return f"Error: {str(e)}"
+```
+
+## Advanced Usage
+
+### Low-Level Server
+
+For more control, you can use the low-level server implementation directly. This gives you full access to the protocol and allows you to customize every aspect of your server, including lifecycle management through the lifespan API:
+
+```python
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+
+from fake_database import Database  # Replace with your actual DB type
+
+from mcp.server import Server
+
+
+@asynccontextmanager
+async def server_lifespan(server: Server) -> AsyncIterator[dict]:
+    """Manage server startup and shutdown lifecycle."""
+    # Initialize resources on startup
+    db = await Database.connect()
+    try:
+        yield {"db": db}
+    finally:
+        # Clean up on shutdown
+        await db.disconnect()
+
+
+# Pass lifespan to server
+server = Server("example-server", lifespan=server_lifespan)
+
+
+# Access lifespan context in handlers
+@server.call_tool()
+async def query_db(name: str, arguments: dict) -> list:
+    ctx = server.request_context
+    db = ctx.lifespan_context["db"]
+    return await db.query(arguments["query"])
+```
+
+The lifespan API provides:
+- A way to initialize resources when the server starts and clean them up when it stops
+- Access to initialized resources through the request context in handlers
+- Type-safe context passing between lifespan and request handlers
+
+```python
+import mcp.server.stdio
+import mcp.types as types
+from mcp.server.lowlevel import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
+
+# Create a server instance
+server = Server("example-server")
+
+
+@server.list_prompts()
+async def handle_list_prompts() -> list[types.Prompt]:
+    return [
+        types.Prompt(
+            name="example-prompt",
+            description="An example prompt template",
+            arguments=[
+                types.PromptArgument(
+                    name="arg1", description="Example argument", required=True
+                )
+            ],
+        )
+    ]
+
+
+@server.get_prompt()
+async def handle_get_prompt(
+    name: str, arguments: dict[str, str] | None
+) -> types.GetPromptResult:
+    if name != "example-prompt":
+        raise ValueError(f"Unknown prompt: {name}")
+
+    return types.GetPromptResult(
+        description="Example prompt",
+        messages=[
+            types.PromptMessage(
+                role="user",
+                content=types.TextContent(type="text", text="Example prompt text"),
+            )
+        ],
+    )
+
+
+async def run():
+    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            InitializationOptions(
+                server_name="example",
+                server_version="0.1.0",
+                capabilities=server.get_capabilities(
+                    notification_options=NotificationOptions(),
+                    experimental_capabilities={},
+                ),
+            ),
+        )
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(run())
+```
+
+### Writing MCP Clients
+
+The SDK provides a high-level client interface for connecting to MCP servers:
+
+```python
+from mcp import ClientSession, StdioServerParameters, types
+from mcp.client.stdio import stdio_client
+
+# Create server parameters for stdio connection
+server_params = StdioServerParameters(
+    command="python",  # Executable
+    args=["example_server.py"],  # Optional command line arguments
+    env=None,  # Optional environment variables
+)
+
+
+# Optional: create a sampling callback
+async def handle_sampling_message(
+    message: types.CreateMessageRequestParams,
+) -> types.CreateMessageResult:
+    return types.CreateMessageResult(
+        role="assistant",
+        content=types.TextContent(
+            type="text",
+            text="Hello, world! from model",
+        ),
+        model="gpt-3.5-turbo",
+        stopReason="endTurn",
+    )
+
+
+async def run():
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(
+            read, write, sampling_callback=handle_sampling_message
+        ) as session:
+            # Initialize the connection
+            await session.initialize()
+
+            # List available prompts
+            prompts = await session.list_prompts()
+
+            # Get a prompt
+            prompt = await session.get_prompt(
+                "example-prompt", arguments={"arg1": "value"}
+            )
+
+            # List available resources
+            resources = await session.list_resources()
+
+            # List available tools
+            tools = await session.list_tools()
+
+            # Read a resource
+            content, mime_type = await session.read_resource("file://some/path")
+
+            # Call a tool
+            result = await session.call_tool("tool-name", arguments={"arg1": "value"})
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(run())
+```
+
+### MCP Primitives
+
+The MCP protocol defines three core primitives that servers can implement:
+
+| Primitive | Control               | Description                                         | Example Use                  |
+|-----------|-----------------------|-----------------------------------------------------|------------------------------|
+| Prompts   | User-controlled       | Interactive templates invoked by user choice        | Slash commands, menu options |
+| Resources | Application-controlled| Contextual data managed by the client application   | File contents, API responses |
+| Tools     | Model-controlled      | Functions exposed to the LLM to take actions        | API calls, data updates      |
+
+### Server Capabilities
+
+MCP servers declare capabilities during initialization:
+
+| Capability  | Feature Flag                 | Description                        |
+|-------------|------------------------------|------------------------------------|
+| `prompts`   | `listChanged`                | Prompt template management         |
+| `resources` | `subscribe`<br/>`listChanged`| Resource exposure and updates      |
+| `tools`     | `listChanged`                | Tool discovery and execution       |
+| `logging`   | -                            | Server logging configuration       |
+| `completion`| -                            | Argument completion suggestions    |
+
+
+--------------------------------
+
+# MCP Clients
+---
+title: "For Client Developers"
+description: "Get started building your own client that can integrate with all MCP servers."
+---
+
+In this tutorial, you'll learn how to build a LLM-powered chatbot client that connects to MCP servers. It helps to have gone through the [Server quickstart](/quickstart/server) that guides you through the basic of building your first server.
+
+## System Requirements
+
+Before starting, ensure your system meets these requirements:
+- Mac or Windows computer
+- Latest Python version installed
+- Latest version of `uv` installed
+
+## Setting Up Your Environment
+
+First, create a new Python project with `uv`:
+
+```bash
+# Create project directory
+uv init mcp-client
+cd mcp-client
+
+# Create virtual environment
+uv venv
+
+# Activate virtual environment
+# On Windows:
+.venv\Scripts\activate
+# On Unix or MacOS:
+source .venv/bin/activate
+
+# Install required packages
+uv add mcp anthropic python-dotenv
+
+# Remove boilerplate files
+rm main.py
+
+# Create our main file
+touch client.py
+```
+
+## Setting Up Your API Key
+
+You'll need an Anthropic API key from the [Anthropic Console](https://console.anthropic.com/settings/keys).
+
+Create a `.env` file to store it:
+
+```bash
+# Create .env file
+touch .env
+```
+
+Add your key to the `.env` file:
+```bash
+ANTHROPIC_API_KEY=<your key here>
+```
+
+Add `.env` to your `.gitignore`:
+```bash
+echo ".env" >> .gitignore
+```
+
+<Warning>
+Make sure you keep your `ANTHROPIC_API_KEY` secure!
+</Warning>
+
+## Creating the Client
+
+### Basic Client Structure
+First, let's set up our imports and create the basic client class:
+
+```python
+import asyncio
+from typing import Optional
+from contextlib import AsyncExitStack
+
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+from anthropic import Anthropic
+from dotenv import load_dotenv
+
+load_dotenv()  # load environment variables from .env
+
+class MCPClient:
+    def __init__(self):
+        # Initialize session and client objects
+        self.session: Optional[ClientSession] = None
+        self.exit_stack = AsyncExitStack()
+        self.anthropic = Anthropic()
+    # methods will go here
+```
+
+### Server Connection Management
+
+Next, we'll implement the method to connect to an MCP server:
+
+```python
+async def connect_to_server(self, server_script_path: str):
+    """Connect to an MCP server
+
+    Args:
+        server_script_path: Path to the server script (.py or .js)
+    """
+    is_python = server_script_path.endswith('.py')
+    is_js = server_script_path.endswith('.js')
+    if not (is_python or is_js):
+        raise ValueError("Server script must be a .py or .js file")
+
+    command = "python" if is_python else "node"
+    server_params = StdioServerParameters(
+        command=command,
+        args=[server_script_path],
+        env=None
+    )
+
+    stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
+    self.stdio, self.write = stdio_transport
+    self.session = await self.exit_stack.enter_async_context(ClientSession(self.stdio, self.write))
+
+    await self.session.initialize()
+
+    # List available tools
+    response = await self.session.list_tools()
+    tools = response.tools
+    print("\nConnected to server with tools:", [tool.name for tool in tools])
+```
+
+### Query Processing Logic
+
+Now let's add the core functionality for processing queries and handling tool calls:
+
+```python
+async def process_query(self, query: str) -> str:
+    """Process a query using Claude and available tools"""
+    messages = [
+        {
+            "role": "user",
+            "content": query
+        }
+    ]
+
+    response = await self.session.list_tools()
+    available_tools = [{
+        "name": tool.name,
+        "description": tool.description,
+        "input_schema": tool.inputSchema
+    } for tool in response.tools]
+
+    # Initial Claude API call
+    response = self.anthropic.messages.create(
+        model="claude-3-5-sonnet-20241022",
+        max_tokens=1000,
+        messages=messages,
+        tools=available_tools
+    )
+
+    # Process response and handle tool calls
+    final_text = []
+
+    assistant_message_content = []
+    for content in response.content:
+        if content.type == 'text':
+            final_text.append(content.text)
+            assistant_message_content.append(content)
+        elif content.type == 'tool_use':
+            tool_name = content.name
+            tool_args = content.input
+
+            # Execute tool call
+            result = await self.session.call_tool(tool_name, tool_args)
+            final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
+
+            assistant_message_content.append(content)
+            messages.append({
+                "role": "assistant",
+                "content": assistant_message_content
+            })
+            messages.append({
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": content.id,
+                        "content": result.content
+                    }
+                ]
+            })
+
+            # Get next response from Claude
+            response = self.anthropic.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=1000,
+                messages=messages,
+                tools=available_tools
+            )
+
+            final_text.append(response.content[0].text)
+
+    return "\n".join(final_text)
+```
+
+### Interactive Chat Interface
+Now we'll add the chat loop and cleanup functionality:
+
+```python
+async def chat_loop(self):
+    """Run an interactive chat loop"""
+    print("\nMCP Client Started!")
+    print("Type your queries or 'quit' to exit.")
+
+    while True:
+        try:
+            query = input("\nQuery: ").strip()
+
+            if query.lower() == 'quit':
+                break
+
+            response = await self.process_query(query)
+            print("\n" + response)
+
+        except Exception as e:
+            print(f"\nError: {str(e)}")
+
+async def cleanup(self):
+    """Clean up resources"""
+    await self.exit_stack.aclose()
+```
+
+### Main Entry Point
+
+Finally, we'll add the main execution logic:
+
+```python
+async def main():
+    if len(sys.argv) < 2:
+        print("Usage: python client.py <path_to_server_script>")
+        sys.exit(1)
+
+    client = MCPClient()
+    try:
+        await client.connect_to_server(sys.argv[1])
+        await client.chat_loop()
+    finally:
+        await client.cleanup()
+
+if __name__ == "__main__":
+    import sys
+    asyncio.run(main())
+```
+
+You can find the complete `client.py` file [here.](https://gist.github.com/zckly/f3f28ea731e096e53b39b47bf0a2d4b1)
+
+## Key Components Explained
+
+### 1. Client Initialization
+- The `MCPClient` class initializes with session management and API clients
+- Uses `AsyncExitStack` for proper resource management
+- Configures the Anthropic client for Claude interactions
+
+### 2. Server Connection
+- Supports both Python and Node.js servers
+- Validates server script type
+- Sets up proper communication channels
+- Initializes the session and lists available tools
+
+### 3. Query Processing
+- Maintains conversation context
+- Handles Claude's responses and tool calls
+- Manages the message flow between Claude and tools
+- Combines results into a coherent response
+
+### 4. Interactive Interface
+- Provides a simple command-line interface
+- Handles user input and displays responses
+- Includes basic error handling
+- Allows graceful exit
+
+### 5. Resource Management
+- Proper cleanup of resources
+- Error handling for connection issues
+- Graceful shutdown procedures
+
+## Common Customization Points
+
+1. **Tool Handling**
+   - Modify `process_query()` to handle specific tool types
+   - Add custom error handling for tool calls
+   - Implement tool-specific response formatting
+
+2. **Response Processing**
+   - Customize how tool results are formatted
+   - Add response filtering or transformation
+   - Implement custom logging
+
+3. **User Interface**
+   - Add a GUI or web interface
+   - Implement rich console output
+   - Add command history or auto-completion
+
+## Running the Client
+
+To run your client with any MCP server:
+
+```bash
+uv run client.py path/to/server.py # python server
+uv run client.py path/to/build/index.js # node server
+```
+
+<Note>
+If you're continuing the weather tutorial from the server quickstart, your command might look something like this: `python client.py .../quickstart-resources/weather-server-python/weather.py`
+</Note>
+
+The client will:
+1. Connect to the specified server
+2. List available tools
+3. Start an interactive chat session where you can:
+   - Enter queries
+   - See tool executions
+   - Get responses from Claude
+
+Here's an example of what it should look like if connected to the weather server from the server quickstart:
+
+<Frame>
+  <img src="/images/client-claude-cli-python.png" />
+</Frame>
+
+## How It Works
+
+When you submit a query:
+
+1. The client gets the list of available tools from the server
+2. Your query is sent to Claude along with tool descriptions
+3. Claude decides which tools (if any) to use
+4. The client executes any requested tool calls through the server
+5. Results are sent back to Claude
+6. Claude provides a natural language response
+7. The response is displayed to you
+
+## Best practices
+
+1. **Error Handling**
+   - Always wrap tool calls in try-catch blocks
+   - Provide meaningful error messages
+   - Gracefully handle connection issues
+
+2. **Resource Management**
+   - Use `AsyncExitStack` for proper cleanup
+   - Close connections when done
+   - Handle server disconnections
+
+3. **Security**
+   - Store API keys securely in `.env`
+   - Validate server responses
+   - Be cautious with tool permissions
+
+## Troubleshooting
+
+### Server Path Issues
+- Double-check the path to your server script is correct
+- Use the absolute path if the relative path isn't working
+- For Windows users, make sure to use forward slashes (/) or escaped backslashes (\\) in the path
+- Verify the server file has the correct extension (.py for Python or .js for Node.js)
+
+Example of correct path usage:
+```bash
+# Relative path
+uv run client.py ./server/weather.py
+
+# Absolute path
+uv run client.py /Users/username/projects/mcp-server/weather.py
+
+# Windows path (either format works)
+uv run client.py C:/projects/mcp-server/weather.py
+uv run client.py C:\\projects\\mcp-server\\weather.py
+```
+
+### Response Timing
+- The first response might take up to 30 seconds to return
+- This is normal and happens while:
+  - The server initializes
+  - Claude processes the query
+  - Tools are being executed
+- Subsequent responses are typically faster
+- Don't interrupt the process during this initial waiting period
+
+### Common Error Messages
+
+If you see:
+- `FileNotFoundError`: Check your server path
+- `Connection refused`: Ensure the server is running and the path is correct
+- `Tool execution failed`: Verify the tool's required environment variables are set
+- `Timeout error`: Consider increasing the timeout in your client configuration

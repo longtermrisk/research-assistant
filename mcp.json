@@ -1,0 +1,37 @@
+{
+    "mcpServers": {
+        "terminal": {
+            "command": "/Users/nielswarncke/.local/bin/uv",
+            "args": [
+                "--directory",
+                "/path/to/repo/terminal-mcp",
+                "run",
+                "terminal.py"
+            ]
+        },
+        "web": {
+            "command": "/Users/nielswarncke/.local/bin/uv",
+            "args": [
+                "--directory",
+                "/path/to/repo/web-mcp",
+                "run",
+                "web.py"
+            ],
+            "env": {
+                "SERP_API_KEY": "google search api key"
+            }
+        },
+        "talk2model": {
+            "command": "/Users/nielswarncke/.local/bin/uv",
+            "args": [
+                "--directory",
+                "/path/to/repo/talk-to-model",
+                "run",
+                "talk_to_model.py"
+            ],
+            "env": {
+                "OPENAI_API_KEY": "openai api key"
+            }
+        }
+    }
+}

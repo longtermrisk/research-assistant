@@ -1,0 +1,20 @@
+[project]
+name = "automator"
+version = "0.1.0"
+description = "MCP-based LLM agent system"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.50.0",
+    "backoff>=2.2.1",
+    "mcp[cli]>=1.6.0",
+    "openai>=1.76.0",
+    "pyyaml>=6.0.2",
+    "fastapi>=0.111.0",
+    "pydantic>=2.7.0",
+    "uvicorn>=0.34.2",
+    "python-dotenv>=1.0.0",
+]
+
+[tool.setuptools]
+packages = ["automator", "scripts"]
