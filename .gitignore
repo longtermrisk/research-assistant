@@ -184,3 +184,6 @@ resources/team_orchestrator.py
 squiggpy/notebooks
 todo.md
 .vscode/
+
+*.private
+.openai_batch_cache

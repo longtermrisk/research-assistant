@@ -110,7 +110,8 @@ class Workspace:
             _ensure_dir(self._agent_dir)
             _ensure_dir(self._thread_dir)
 
-        self.env: Dict[str, str] = env or {'CWD': self._root_dir / 'workspace'}
+        self.env: Dict[str, str] = {'CWD': str(self._root_dir / 'workspace')}
+        self.env.update(env)
         os.makedirs(self.env['CWD'], exist_ok=True)
 
     # ---------------------------------------------------------------------

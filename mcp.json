@@ -30,7 +30,8 @@
                 "talk_to_model.py"
             ],
             "env": {
-                "OPENAI_API_KEY": "openai api key"
+                "OPENAI_API_KEY": "openai api key",
+                "OPENWEIGHTS_API_KEY": "openweights api key"
             }
         }
     }

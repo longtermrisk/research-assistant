@@ -8,7 +8,7 @@ from automator.dtypes import SubagentToolDefinition
 
 
 async def main() -> None:
-    workspace = Workspace('my-workspace', env={'FOO': 'bar'})
+    workspace = Workspace('my-workspace', env={'CWD': '../workspace'})
     
     # Create some experts
     alice = Agent(

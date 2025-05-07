@@ -1,4 +1,5 @@
 from typing import List, Callable
+import os
 import anthropic
 import openai
 import json
@@ -42,83 +43,82 @@ async def get_response_anthropic(messages, tools, **kwargs):
 # ---------------------------------------------------------------------------
 
 
-_oai_client = openai.AsyncOpenAI()
+def get_response_factory(oai: openai.AsyncOpenAI):
+    async def get_response_openai(messages, tools, **kwargs):
+        """Return a ``ChatMessage`` from OpenAI's Chat Completions endpoint.
 
+        The *complete* message history is forwarded to the API.  The assistant's
+        reply is converted back into the shared internal representation so that
+        the rest of the codebase can stay provider-agnostic.
+        """
 
-async def get_response_openai(messages, tools, **kwargs):
-    """Return a ``ChatMessage`` from OpenAI's Chat Completions endpoint.
+        # Translate our internal representation into the OpenAI payload.
+        kwargs = openai_format(messages, tools, **kwargs)
 
-    The *complete* message history is forwarded to the API.  The assistant's
-    reply is converted back into the shared internal representation so that
-    the rest of the codebase can stay provider-agnostic.
-    """
+        # The model name is required by the SDK.  It is included in ``kwargs`` as
+        # passed in by the caller.  We raise a clear exception if it is missing –
+        # this indicates a programming error further up the stack.
+        if "model" not in kwargs:
+            raise ValueError("'model' is required for OpenAI completions")
 
-    # Translate our internal representation into the OpenAI payload.
-    kwargs = openai_format(messages, tools, **kwargs)
+        resp = await oai.chat.completions.create(**kwargs)
 
-    # The model name is required by the SDK.  It is included in ``kwargs`` as
-    # passed in by the caller.  We raise a clear exception if it is missing –
-    # this indicates a programming error further up the stack.
-    if "model" not in kwargs:
-        raise ValueError("'model' is required for OpenAI completions")
+        # We do **not** request streaming responses because the surrounding code
+        # expects the assistant's answer to be available in one go.  The first –
+        # and only – choice therefore contains the message we need.
+        message = resp.choices[0].message
 
-    resp = await _oai_client.chat.completions.create(**kwargs)
+        blocks = []
 
-    # We do **not** request streaming responses because the surrounding code
-    # expects the assistant's answer to be available in one go.  The first –
-    # and only – choice therefore contains the message we need.
-    message = resp.choices[0].message
+        # Text
+        if message.content:
+            if isinstance(message.content, str):
+                if message.content.strip():
+                    blocks.append(TextBlock(text=message.content))
+            else:
+                # Multi-modal response (text + vision)
+                for part in message.content:
+                    if part["type"] == "text":
+                        blocks.append(TextBlock(text=part["text"]))
+                    elif part["type"] == "image_url":
+                        url: str = part["image_url"]["url"]
+                        if not url.startswith("data:"):
+                            # Remote URLs are currently not supported – we simply
+                            # ignore them so that the rest of the message can be
+                            # processed.
+                            continue
 
-    blocks = []
-
-    # Text
-    if message.content:
-        if isinstance(message.content, str):
-            if message.content.strip():
-                blocks.append(TextBlock(text=message.content))
-        else:
-            # Multi-modal response (text + vision)
-            for part in message.content:
-                if part["type"] == "text":
-                    blocks.append(TextBlock(text=part["text"]))
-                elif part["type"] == "image_url":
-                    url: str = part["image_url"]["url"]
-                    if not url.startswith("data:"):
-                        # Remote URLs are currently not supported – we simply
-                        # ignore them so that the rest of the message can be
-                        # processed.
-                        continue
-
-                    # The format is: data:<mime>;base64,<data>
-                    header, b64_data = url.split(",", 1)
-                    media_type = header[len("data:") : header.index(";")]
-                    blocks.append(
-                        ImageBlock.from_base64(
-                            data=b64_data,
-                            media_type=media_type,
+                        # The format is: data:<mime>;base64,<data>
+                        header, b64_data = url.split(",", 1)
+                        media_type = header[len("data:") : header.index(";")]
+                        blocks.append(
+                            ImageBlock.from_base64(
+                                data=b64_data,
+                                media_type=media_type,
+                            )
                         )
+
+        # Tool calls
+        if message.tool_calls:
+            for call in message.tool_calls:
+                arguments: Dict[str, Any]
+                try:
+                    arguments = json.loads(call.function.arguments)
+                except Exception:
+                    # The arguments string is not valid JSON – fall back to the
+                    # raw string to avoid data loss.
+                    arguments = {"_raw_arguments": call.function.arguments}
+
+                blocks.append(
+                    ToolUseBlock(
+                        id=call.id,
+                        name=call.function.name,
+                        input=arguments,
                     )
-
-    # Tool calls
-    if message.tool_calls:
-        for call in message.tool_calls:
-            arguments: Dict[str, Any]
-            try:
-                arguments = json.loads(call.function.arguments)
-            except Exception:
-                # The arguments string is not valid JSON – fall back to the
-                # raw string to avoid data loss.
-                arguments = {"_raw_arguments": call.function.arguments}
-
-            blocks.append(
-                ToolUseBlock(
-                    id=call.id,
-                    name=call.function.name,
-                    input=arguments,
                 )
-            )
 
-    return ChatMessage(role=MessageRole.assistant, content=blocks)
+        return ChatMessage(role=MessageRole.assistant, content=blocks)
+    return get_response_openai
 
 
 _available_anthropic_models: List[str]
@@ -145,30 +145,30 @@ providers = [
 # Register OpenAI models
 # ---------------------------------------------------------------------------
 
-_available_openai_models: List[str]
 
-try:
+if 'OPENAI_API_KEY' in os.environ:
     _available_openai_models = [m.id for m in openai.OpenAI().models.list().data]
-except Exception as e:  # pragma: no cover – may run offline
-    print(e)
-    breakpoint()
-    # Fallback to a predefined set of well-known models so that unit tests can
-    # still exercise the OpenAI provider even without network access.
-    _available_openai_models = [
-        "gpt-4o",
-        "gpt-4o-mini",
-        "gpt-4-turbo",
-        "gpt-4o-2024-05-13",
-        "gpt-4-1106-preview",
-    ]
-
-
-providers.append(
-    Provider(
-        get_response_openai,
-        models=_available_openai_models,
+    providers.append(
+        Provider(
+            get_response_factory(openai.AsyncOpenAI()),
+            models=_available_openai_models,
+        )
     )
-)
+
+
+# ---------------------------------------------------------------------------
+# Register OpenRouter models
+# ---------------------------------------------------------------------------
+
+if 'OPENROUTER_API_KEY' in os.environ:
+    providers.append(
+        Provider(
+            get_response_factory(openai.AsyncOpenAI(api_key=os.environ['OPENROUTER_API_KEY'], base_url="https://openrouter.ai/api/v1")),
+            models=[
+                'google/gemini-2.5-pro-preview',
+            ],
+        )
+    )
 
 
 # @backoff.on_exception(
@@ -190,4 +190,5 @@ async def get_response(model, messages, **kwargs):
         if model in provider.models:
             return await provider.get_response(model=model, messages=messages, **kwargs)
     raise ValueError(f"Model '{model}' not supported by any provider. Supported models: {provider.models}")
+        
     

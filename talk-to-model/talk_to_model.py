@@ -10,23 +10,26 @@ import json
 import uuid
 import asyncio
 from typing import Dict, List, Optional, Any, Union
+from slugify import slugify
 
 from mcp.server.fastmcp import FastMCP, Context
+import pandas as pd
 import openai
 import yaml
+from openweights import OpenWeights
+from viseval import VisEval, FreeformQuestion, FreeformEval
 
 # Create an MCP server
 mcp = FastMCP("Talk-to-Model")
 
-_available_openai_models = [m.id for m in openai.OpenAI().models.list().data]
-oai = openai.AsyncOpenAI()
 
+ow = OpenWeights()
 # Dictionary to store message threads/history
 threads = {}
 
 
 
-async def call_openai_model(
+async def call_model(
     model: str, 
     messages: List[Dict[str, str]],
     temperature: float,
@@ -35,7 +38,7 @@ async def call_openai_model(
 ) -> str:
     """Call an OpenAI model with the given messages."""
     try:
-        response = await oai.chat.completions.create(
+        response = await ow.async_chat.completions.create(
             model=model,
             messages=messages,
             temperature=temperature,
@@ -57,7 +60,7 @@ async def send_message(
     thread: Optional[str] = None,
     n_responses: int = 1,
     temperature: float = 0.7,
-    max_tokens: int = 8000,
+    max_tokens: int = 1000,
     ctx: Context = None,
 ) -> str:
     """
@@ -94,7 +97,7 @@ async def send_message(
     
     async def get_response_and_update_thread():
         try:
-            response_text = await call_openai_model(model, messages, temperature, max_tokens, ctx)
+            response_text = await call_model(model, messages, temperature, max_tokens, ctx)
             # Create a new thread or update existing one
             new_thread_id = thread or str(uuid.uuid4())
             new_messages = messages.copy()
@@ -137,7 +140,199 @@ async def send_message(
         return yaml.safe_dump(result)
 
 
+@mcp.tool()
+async def create_freeform_question_eval(
+    questions: List[str],
+    judge_prompts: Dict[str, str],
+    n_samples: int = 100,
+    temperature: float = 1,
+) -> str:
+    """Create a freeform question eval - a list of questions to ask a group of models, and a dictionary of metrics with corresponding judge prompts.
+
+    Args:
+        questions: List of questions to ask the models
+        n_samples: Number of samples to generate for each question
+        judge_prompts: Dictionary of metric->prompt mappings
+        temperature: Sampling temperature for the models
+    Returns:
+        freeform_eval_path: Path to the freeform question eval file
+    """
+    errors = []
+    for metric, prompt in judge_prompts.items():
+        if not "{question}" in prompt:
+            errors.append(f"Metric `{metric}` prompt does not contain '{{question}}'")
+        if not "{answer}" in prompt:
+            errors.append(f"Metric `{metric}` prompt does not contain '{{answer}}'")
+    if errors:
+        return "ERROR: \n" + "\n".join(errors)
+
+    freeform_questions = []
+    for question in questions:
+        question_id = str(len(freeform_questions)) + "_" + "-".join(slugify(question).split("-")[:5])
+        freeform_questions.append({
+            "id": question_id,
+            "paraphrases": [question],
+            "samples_per_paraphrase": n_samples,
+            "temperature": temperature,
+            "judge_prompts": judge_prompts,
+            "judge": "gpt-4o-2024-08-06"
+        })
+    os.makedirs("freeform_evals", exist_ok=True)
+    path = f"freeform_evals/eval_{len(os.listdir('freeform_evals'))}.yaml"
+    with open(path, "w") as f:
+        yaml.dump(freeform_questions, f, default_flow_style=False)
+    return path
+
+    
+@mcp.tool()
+async def list_freeform_question_evals() -> str:
+    """List the available freeform question evals.
+
+    Returns:
+        freeform_evals: list of available freeform question evals (yaml files)
+    """
+    freeform_evals = os.listdir("freeform_evals")
+    freeform_evals = [f for f in freeform_evals if f.endswith(".yaml")]
+    return "\n".join(freeform_evals)
+
+
+@mcp.tool()
+async def show_freeform_question_eval(freeform_eval_path: str) -> str:
+    """Show the full content of a freeform question eval yaml file.
+    Args:
+        freeform_eval_path: Path to the freeform question eval yaml file
+    """
+    if not os.path.exists(freeform_eval_path):
+        return f"File {freeform_eval_path} does not exist."
+    if not freeform_eval_path.endswith(".yaml"):
+        return f"File {freeform_eval_path} is not a yaml file."
+    # Check if the file is in ./freeform_evals directory (for security reasons)
+    if not os.path.abspath(freeform_eval_path).startswith(os.path.abspath("freeform_evals")):
+        return f"File {freeform_eval_path} is not in the freeform_evals directory."
+    # Read the file
+    with open(freeform_eval_path, "r") as f:
+        return f.read()
+
+
+@mcp.tool()
+async def run_freeform_question_eval(
+    models: Dict[str, List[str]],
+    freeform_eval_path: str,
+) -> str:
+    """Evaluate a group of models by asking them questions that will be judged by an LLM judge.
+    Args:
+        models: Dictionary of model groups: {group_name: [model1, model2, ...]}
+            groups can be used for experiments where the same experiment has been run with different random seeds
+            groups may contain a single model
+        freeform_eval_path: Path to the freeform question eval yaml file
+    Returns:
+        result_path: Path to the result file
+    """
+    name = os.path.splitext(os.path.basename(freeform_eval_path))[0]
+    freeform_eval = FreeformEval.from_yaml(path=freeform_eval_path)
+    evaluator = VisEval(
+        run_eval=freeform_eval.run,
+        metric=list(freeform_eval.questions[0].judges.keys())[0],
+        name=name,  # Name of the evaluation
+    )
+
+    # Run eval for all models
+    try:
+        results = await evaluator.run(models)
+    except Exception as e:
+        return f"Error running evaluation: {str(e)}"
+    # Save results to CSV
+    results_dir = f"results/{name}"
+    os.makedirs(results_dir, exist_ok=True)
+    results_path = f"{results_dir}/results_{len(os.listdir())}.csv"
+    results.df.to_csv(results_path, index=False)
+    output = f"Results saved to: {results_path}\n"
+    summary = results.df.groupby('group').agg({
+        metric: ['mean', 'std']
+        for metric in freeform_eval.questions[0].judges.keys()
+    }).to_markdown()
+    output += f"Summary: {summary}\n"
+    return output
+
+
+@mcp.tool()
+async def describe_csv(
+    csv_path: str,
+) -> str:
+    """Describe a CSV file by showing its columns and types.
+
+    Args:
+        csv_path: Path to the CSV file
+    """
+    import pandas as pd
+    df = pd.read_csv(csv_path)
+    description = df.describe(include="all").to_dict()
+    return json.dumps(description, indent=4)
+
+
+from enum import Enum
+
+class Order(Enum):
+    ASCENDING = "ascending"
+    DESCENDING = "descending"
+    RANDOM = "random"
+
+
+@mcp.tool()
+async def show_samples(
+    csv_path: str,
+    n_rows: int = 100,
+    sortby_col: Optional[str] = None,
+    sortby_order: Order = Order.RANDOM,
+) -> str:
+    """Explore a dataset by showing rows.
+
+    Args:
+        csv_path: Path to the CSV file
+        n_rows: Number of rows to show
+        sortby_col: Column to sort by
+        sortby_order: Order to sort by (ascending, descending, random)
+    """
+    df = pd.read_csv(csv_path)
+    if sortby_col:
+        df = df.sort_values(by=sortby_col, ascending=(sortby_order == Order.ASCENDING))
+    if sortby_order == Order.RANDOM:
+        df = df.sample(frac=1).reset_index(drop=True)
+    if n_rows > 0:
+        df = df.head(n_rows)
+    return json.dumps(df.to_dict(orient="records"), indent=4)
+
+
+def copy_freeform_evals():
+    """Copy freeform evals from __file__.parent/freeform_evals to ./freeform_evals"""
+    os.makedirs("freeform_evals", exist_ok=True)
+    for file in os.listdir(os.path.dirname(__file__) + "/freeform_evals"):
+        if file.endswith(".yaml"):
+            with open(os.path.dirname(__file__) + f"/freeform_evals/{file}", "r") as f:
+                content = f.read()
+            with open(f"freeform_evals/{file}", "w") as f:
+                f.write(content)
+
+async def debug():
+    kwargs = {
+        "models": {
+            "Qwen3-8B": [
+                "Qwen/Qwen3-8B"
+            ],
+            "GPT-4.1": [
+                "gpt-4o-2024-08-06"
+            ]
+        },
+        "freeform_eval_path": "freeform_evals/eval_4.yaml"
+    }
+    result = await run_freeform_question_eval(**kwargs)
+    print(result)
+
+
 if __name__ == "__main__":
-    with open('/Users/nielswarncke/Documents/researchoor/talk-to-model/models', 'w') as f:
-        f.write('\n'.join(_available_openai_models))
+    CWD = os.environ.get("CWD", os.getcwd())
+    CWD = os.environ.get("CWD", '../research-assistant')
+    os.chdir(CWD)
+    copy_freeform_evals()
     mcp.run()
+    # asyncio.run(debug()) 

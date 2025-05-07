@@ -120,7 +120,7 @@ class ToolResultBlock(BaseModel):
         }
 
 
-ContentBlock = Union[TextBlock, ToolUseBlock, ToolResultBlock]
+ContentBlock = Union[TextBlock, ImageBlock, ToolUseBlock, ToolResultBlock]
 
 
 class ChatMessage(BaseModel):

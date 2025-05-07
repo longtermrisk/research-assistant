@@ -1,4 +1,4 @@
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Any
 import asyncio
 from typing import Optional
 from contextlib import AsyncExitStack
@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from automator.utils import load_json
 
 from automator.dtypes import (
+    ContentBlock,
     TextBlock,
     ImageBlock,
     ToolDefinition,
@@ -35,7 +36,7 @@ class Agent:
         self,
         model: str,
         prompt_template_yaml: str,
-         tools: List[str] = None,
+        tools: List[str] = None,
         env: Dict[str, str] = None,
         subagents: None | List[str] = None,
         as_tool: ToolDefinition | None = None,
@@ -289,6 +290,21 @@ class Thread:
             if tool.name == block.name:
                 return await tool.prepare(block)
         raise ValueError(f"Tool {block.name} not found in available tools.")
+
+    async def tool_call(self, tool_name: str, input: Dict[str, Any]) -> List[ContentBlock]:
+        """Process a tool call block outside of the standard (llm, tool calls) loop"""
+        for tool in self.tools:
+            if tool.name == tool_name:
+                tool_call = await tool.prepare(
+                    ToolUseBlock(
+                        id=uuid4().hex,
+                        name=tool_name,
+                        input=input
+                    )
+                )
+                tool_result = await tool_call.call()
+                return tool_result.content
+        raise ValueError(f"Tool {tool_name} not found in available tools.")
     
     async def run(self, query):
         if not self._ready:

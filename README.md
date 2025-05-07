@@ -9,4 +9,9 @@ This monorepo contains an implementation of LLM agents that help with research. 
 - [squiggpy](squiggpy) contains a squiggle-like python library and a prompt for agents to use the library
 
 ## Setup
-Each component needs to be setup individually. `uv` is used for python venv and dependency management.
+Each component needs to be setup individually. `uv` is used for python venv and dependency management:
+```bash
+uv venv
+source .venv/bin/activate
+uv sync
+```

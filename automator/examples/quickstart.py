@@ -7,17 +7,14 @@ from automator.workspace import Workspace
 
 
 async def main() -> None:
-    workspace = Workspace('my-workspace', env={'FOO': 'bar'})
+    workspace = Workspace('my-workspace', env={'FOO': 'bar', 'CWD': '../workspace'})
     bash_agent = Agent(
         # model="claude-3-7-sonnet-20250219",
-        model="claude-3-5-haiku-20241022",
+        # model="claude-3-5-haiku-20241022",
         # model='o4-mini',
+        model='google/gemini-2.5-pro-preview',
         prompt_template_yaml="prompts/chatgpt.yaml",
-        tools=[
-            "terminal.terminal_execute",
-            "terminal.terminal_stdin",
-            "terminal.terminal_logs",
-        ],
+        tools=["terminal.*",],
         env={},  # agent‑specific environment overrides (optional)
     )
     bash_agent = workspace.add_agent(agent=bash_agent, id="bash")
