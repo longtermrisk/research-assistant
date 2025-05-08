@@ -159,13 +159,70 @@
   opacity: 0.9;
 }
 
-
-/* Message Input Area */
-.message-input-area {
-  display: flex;
+/* Message Input Container - For Drag & Drop */
+.message-input-container {
   padding: 10px 15px;
   border-top: 1px solid var(--border-primary);
   background-color: var(--background-secondary);
+  /* Transition for outline */
+  transition: outline 0.2s ease-out;
+  outline: 2px dashed transparent; /* Default transparent outline */
+}
+
+.message-input-container.dragging-over {
+  outline: 2px dashed var(--foreground-accent); /* Visible outline when dragging over */
+  background-color: var(--background-tertiary); /* Slightly different background */
+}
+
+/* Image Previews */
+.image-previews-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px; /* Space between previews and textarea */
+  padding: 5px 0; /* Some padding if there are images */
+}
+
+.image-preview-item {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.image-preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Crop to fit */
+}
+
+.remove-image-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.remove-image-btn:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+/* Message Input Area (within the container) */
+.message-input-area {
+  display: flex;
+  /* Removed padding and border-top from here as it's on message-input-container now */
 }
 
 .message-input-area textarea {
@@ -191,6 +248,7 @@
   border: none;
   border-radius: 4px;
   cursor: pointer;
+  align-self: flex-end; /* Align button to bottom if textarea grows */
 }
 
 .message-input-area button:disabled {
