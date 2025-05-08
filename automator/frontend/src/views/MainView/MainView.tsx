@@ -174,7 +174,7 @@ const MainView: React.FC = () => {
         imageFiles.map(async (file) => {
           const base64 = await fileToBase64(file);
           return {
-            id: `${file.name}-${Date.now()}`, // Simple unique ID
+            id: `${file.name}-${Date.now()}`,
             file,
             base64,
             media_type: file.type,
@@ -246,7 +246,7 @@ const MainView: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  useEffect(scrollToBottom, [messages, attachedImages]); // Scroll on new images too
+  useEffect(scrollToBottom, [messages, attachedImages]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -286,13 +286,12 @@ const MainView: React.FC = () => {
           type: "base64",
           media_type: img.media_type,
           data: img.base64,
-        } as Base64ImageSource, // Type assertion
+        } as Base64ImageSource,
       });
     });
 
     if (currentThread && threadId) {
       try {
-        // Update postMessage to send contentBlocks
         await api.postMessage(workspaceName, threadId, { content: contentBlocks });
         setNewMessage('');
         setAttachedImages([]);
@@ -301,19 +300,9 @@ const MainView: React.FC = () => {
       }
     } else if (selectedAgentForNewThread) {
       try {
-         // Update createThread to send contentBlocks in initial_query (or adapt API)
-         // For now, assuming initial_query is still string, and images are not part of first message in new thread.
-         // This part needs API adjustment if images are to be sent with the very first message.
-         // For simplicity, let's assume initial_query is just text for now.
-         // If images are needed for initial message, the API and ThreadCreatePayload need to change.
-        if (attachedImages.length > 0) {
-            setError("Sending images with the first message of a new thread is not yet supported. Please send text first, then images.");
-            setIsLoading(false);
-            return;
-        }
         const newThreadSummary = await api.createThread(workspaceName, {
           agent_id: selectedAgentForNewThread,
-          initial_query: newMessage.trim(), // Only text for now
+          initial_content: contentBlocks, // Pass rich content here
         });
         setNewMessage('');
         setAttachedImages([]);
@@ -324,7 +313,7 @@ const MainView: React.FC = () => {
       }
     }
     setIsLoading(false);
-  };
+  }; 
   
   const handleAgentSelectionForNewThread = (agentId: string) => {
     setSelectedAgentForNewThread(agentId);
@@ -363,7 +352,6 @@ const MainView: React.FC = () => {
       .catch(err => console.error("Failed to copy: ", err));
   };
 
-  // Drag and Drop handlers
   const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragging(true);
@@ -383,7 +371,6 @@ const MainView: React.FC = () => {
     }
   }, [handleImageAttach]);
 
-  // Paste handler
   const handlePaste = useCallback(async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = event.clipboardData?.items;
     if (items) {
@@ -397,9 +384,7 @@ const MainView: React.FC = () => {
         }
       }
       if (files.length > 0) {
-        event.preventDefault(); // Prevent pasting file path as text
-        
-        // Create a FileList-like object to pass to handleImageAttach
+        event.preventDefault();
         const dataTransfer = new DataTransfer();
         files.forEach(file => dataTransfer.items.add(file));
         await handleImageAttach(dataTransfer.files);
@@ -541,7 +526,7 @@ const MainView: React.FC = () => {
                 ref={textareaRef}
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                onPaste={handlePaste} // Added paste handler
+                onPaste={handlePaste} 
                 placeholder={currentThread ? `Message ${currentThread.id}` : `Message to ${selectedAgentForNewThread || 'new thread'}...`}
                 rows={1}
                 onKeyPress={(e) => {
@@ -551,7 +536,6 @@ const MainView: React.FC = () => {
                   }
                 }}
               />
-              {/* Hidden file input for triggering programmatically if needed, or just rely on paste/drag-drop */}
               <input 
                   type="file"
                   multiple 
@@ -560,9 +544,6 @@ const MainView: React.FC = () => {
                   style={{ display: 'none' }} 
                   onChange={(e) => handleImageAttach(e.target.files)}
               />
-              {/* Optional: Button to trigger file input 
-              <button onClick={() => fileInputRef.current?.click()} className="attach-file-btn">📎</button> 
-              */}
               <button onClick={handleSendMessage} disabled={isLoading || (!newMessage.trim() && attachedImages.length === 0) || (!threadId && !selectedAgentForNewThread)}>
                 {isLoading ? 'Sending...' : 'Send'}
               </button>

@@ -27,7 +27,7 @@ from automator.dtypes import (
 from automator.llm import get_response
 
 logger = logging.getLogger("uvicorn")
-logger.error("AUTOMATOR.AGENT.PY HAS BEEN RELOADED/IMPORTED (v3 no forward ref update)")
+logger.error("AUTOMATOR.AGENT.PY HAS BEEN RELOADED/IMPORTED (v4 with initial_user_content)")
 
 load_dotenv()
 
@@ -66,16 +66,28 @@ class Agent:
             workspace.register_agent(agent=self, id=id)
     
     
-    async def run(self, query: Optional[str]=None, temperature: float = 0.7, max_tokens: int = None, thread_id: Optional[str] = None, **prompt_template):
+    async def run(self,
+                  query: Optional[str]=None,
+                  initial_user_content: Optional[List[ContentBlock]] = None,
+                  temperature: float = 0.7, max_tokens: int = None,
+                  thread_id: Optional[str] = None,
+                  **prompt_template):
         max_tokens = max_tokens or 8000 if not 'haiku' in self.model else 4000
+
+        # Generate first user message
+        ## Apply the prompt template
         _vars = dict(**self.prompt_template_vars, **prompt_template)
         # Query can be None if we are just re-running a thread without a new user message
         messages_to_apply = {"query": query} if query is not None else {}
         messages = self.prompt_template.apply(dict(messages_to_apply, **_vars))
+        init, template_content = messages[:-1], messages[-1].content
+        ## Remove content blocks that contain $query
+        template_content = [c for c in template_content if not (isinstance(c, TextBlock) and "$query" in c.text)]
+        user_message = ChatMessage(role=MessageRole.user, content=(initial_user_content or []) + template_content)
         
         thread = Thread(
             model=self.model, 
-            messages=messages, 
+            messages=init + [user_message], 
             tools=self.tools, 
             env=self.env, 
             subagents=self.subagents, 
@@ -88,7 +100,7 @@ class Agent:
         return thread
 
     def json(self):
-        as_tool_for_json = self.as_tool # Should already be a dict from __init__
+        as_tool_for_json = self.as_tool
         if isinstance(self.as_tool, (ToolDefinition, SubagentToolDefinition)):
              as_tool_for_json = self.as_tool.model_dump()
         return {
@@ -131,9 +143,8 @@ class SubagentTool:
         self.agent = agent
         self.parent = parent
 
-        as_tool_data = agent.as_tool # Should be a dict
+        as_tool_data = agent.as_tool
         if not isinstance(as_tool_data, dict) and as_tool_data is not None:
-             # This case should ideally not happen if Agent.__init__ normalizes as_tool to dict
              logger.warning(f"Subagent '{name}' as_tool data is not a dict: {type(as_tool_data)}. Attempting dump.")
              if hasattr(as_tool_data, 'model_dump'): as_tool_data = as_tool_data.model_dump()
              else: as_tool_data = {}
@@ -146,14 +157,15 @@ class SubagentTool:
     async def prepare(self, tool_use_block: ToolUseBlock):
         agent_input = tool_use_block.input or {}
         thread_id = agent_input.get('thread_id', None)
+        query_for_subagent = agent_input.get('query', None) # Extract query for subagent
 
         if thread_id and thread_id in self.parent._threads:
             sub_thread = self.parent._threads[thread_id]
             # If query is provided, it's a new message to existing sub-thread
-            # The run method of Thread should handle appending the query if provided
-            await sub_thread.run(**agent_input) 
+            await sub_thread.run(query=query_for_subagent) 
         else:
-            sub_thread = await self.agent.run(**agent_input )
+            # For new sub-thread, pass query directly to agent.run
+            sub_thread = await self.agent.run(query=query_for_subagent, **{k:v for k,v in agent_input.items() if k not in ['query', 'thread_id']})
             thread_id = sub_thread.id
             self.parent._threads[thread_id] = sub_thread
         return SubagentToolCall(name=self.name, thread=sub_thread, tool_use_block=tool_use_block)
@@ -166,11 +178,11 @@ class SubagentToolCall:
 
     async def call(self) -> ToolResultBlock:
         initial_messages_len = len(self.thread.messages)
-        final_message_content = [TextBlock(text="Subagent did not produce additional output.")]
+        final_message_content: List[ContentBlock] = [TextBlock(text="Subagent did not produce additional output.")]
         async for message in self.thread:
             logger.info(f"> Subagent {self.name} (thread {self.thread.id}) message: {str(message)[:100]}")
             final_message_content = message.content
-        response_content = final_message_content + [TextBlock(text=f"(Subagent: {self.name}, Thread ID: {self.thread.id})")]
+        response_content: List[ContentBlock] = final_message_content + [TextBlock(text=f"(Subagent: {self.name}, Thread ID: {self.thread.id})")]
         return ToolResultBlock(tool_use_id=self.tool_use_block.id, content=response_content, meta={"thread_id": self.thread.id, "message_start": initial_messages_len, "message_end": len(self.thread.messages)})
 
 class Thread:
@@ -187,7 +199,7 @@ class Thread:
         self.env = env
         self.subagents = subagents or []
         self._threads: Dict[str, Thread] = {}; self.workspace = workspace; self.id = id or uuid4().hex
-        self.tools: List[McpServerTool | SubagentTool] = []; self._ready = False
+        self.tools: List[McpServerTool | SubagentTool] = []; self._ready = False # type: ignore
         
     async def prepare(self):
         if self._ready: return
@@ -267,10 +279,13 @@ class Thread:
         tool_call_obj = await tool_runner_inst.prepare(ToolUseBlock(id=uuid4().hex, name=tool_name_str, input=input_data_dict))
         tool_result_obj = await tool_call_obj.call(); return tool_result_obj.content
     
-    async def run(self, query: Optional[str] = None):
+    async def run(self, query: Optional[str] = None, user_content: Optional[List[ContentBlock]] = None):
         if not self._ready:
             await self.prepare()
-        if query is not None:
+        
+        if user_content:
+            self.messages.append(ChatMessage(role=MessageRole.user, content=user_content))
+        elif query is not None: # Only use query if user_content is not provided
             self.messages.append(ChatMessage(role=MessageRole.user, content=[TextBlock(text=query)]))
         return self
     
@@ -290,9 +305,9 @@ class Thread:
         within that pair.
         """
         import os
-        import json
+        import json # Already imported at module level
         import base64
-        from uuid import uuid4
+        from uuid import uuid4 # Already imported at module level
 
         log_dir = "./.logs"
         md_dir = os.path.join(log_dir, "md")
@@ -300,126 +315,93 @@ class Thread:
         os.makedirs(md_dir, exist_ok=True) # Ensure .logs/md exists for markdown files
 
         output_path = os.path.abspath(os.path.join(md_dir, f"{self.id}.md"))
-        print(output_path)
-        md = f"# Thread: {self.id}\n\n"
+        # logger.info(f"Writing markdown to: {output_path}") # Temporarily comment out print
+        md_output = f"# Thread: {self.id}\n\n"
 
-        def render_block(block, tool_result=None) -> str:
+        def render_block_md(block_item, tool_result_item=None) -> str:
             """Renders a single content block to markdown."""
-            if isinstance(block, ToolUseBlock):
-                # Only merge tool result if provided
-                return render_tool_block(block, tool_result)
-            elif isinstance(block, ToolResultBlock):
-                # ToolResultBlocks are only rendered *with* their ToolUseBlock
-                # If encountered alone, skip rendering it here.
+            if isinstance(block_item, ToolUseBlock):
+                return render_tool_block_md(block_item, tool_result_item)
+            elif isinstance(block_item, ToolResultBlock):
                 return ""
-            elif isinstance(block, TextBlock):
-                return block.text + "\n"
-            elif isinstance(block, ImageBlock):
-                # Save image relative to the main log dir, link relative to md file
+            elif isinstance(block_item, TextBlock):
+                return block_item.text + "\n"
+            elif isinstance(block_item, ImageBlock):
                 img_filename = f"{uuid4()}.png"
                 img_path_abs = os.path.join(log_dir, img_filename)
-                img_path_rel = os.path.join("..", img_filename) # Relative path from md file
+                img_path_rel = os.path.join("..", img_filename)
                 try:
-                    # Assuming block.source.data holds the base64 encoded string
-                    img_data = base64.b64decode(block.source.data)
-                    with open(img_path_abs, 'wb') as f:
-                        f.write(img_data)
+                    img_data = base64.b64decode(block_item.source.data)
+                    with open(img_path_abs, 'wb') as f_img:
+                        f_img.write(img_data)
                     return f"\n![image]({img_path_rel})\n"
-                except Exception as e:
-                    return f"\n*Error saving/rendering image: {e}*\n"
+                except Exception as e_img:
+                    return f"\n*Error saving/rendering image: {e_img}*\n"
             else:
-                return f"**Unknown block type:** {getattr(block, 'type', str(type(block)))}\n"
+                return f"**Unknown block type:** {getattr(block_item, 'type', str(type(block_item)))}\n"
 
-        def render_tool_block(tool_use: 'ToolUseBlock', tool_result: 'ToolResultBlock' = None) -> str:
+        def render_tool_block_md(tool_use: ToolUseBlock, tool_result: Optional[ToolResultBlock] = None) -> str:
             """Renders a tool call and its result, handling subthreads."""
-            out = f"**Tool Call:** `{tool_use.name}` (ID: `{tool_use.id}`)\n"
-            out += f"```json\n{json.dumps(tool_use.input, indent=2)}\n```\n"
+            out_md = f"**Tool Call:** `{tool_use.name}` (ID: `{tool_use.id}`)\n"
+            out_md += f"```json\n{json.dumps(tool_use.input, indent=2)}\n```\n"
 
             if tool_result:
-                # Check if this tool call corresponds to a subthread
                 if getattr(tool_result, "meta", None) and 'thread_id' in tool_result.meta:
                     subthread_id = tool_result.meta['thread_id']
                     start_msg_idx = tool_result.meta.get('message_start', 0)
                     subthread_link = f"./{subthread_id}.md#message-{start_msg_idx}"
-
-                    # Ensure the subthread markdown file is generated (recursive call)
                     if self.workspace:
                         subthread = self.workspace.get_thread(subthread_id)
                         if subthread:
-                            subthread.to_markdown() # Generate its file
-                            out += f"**Sub-Thread Output:** See [Thread {subthread_id} (Message {start_msg_idx})]({subthread_link})\n"
+                            subthread.to_markdown()
+                            out_md += f"**Sub-Thread Output:** See [Thread {subthread_id} (Message {start_msg_idx})]({subthread_link})\n"
                         else:
-                            out += f"**Sub-Thread Output:** Error - Subthread {subthread_id} not found in workspace.\n"
+                            out_md += f"**Sub-Thread Output:** Error - Subthread {subthread_id} not found.\n"
                     else:
-                        out += f"**Sub-Thread Output:** Error - Workspace not available to render subthread {subthread_id}.\n"
-
+                        out_md += f"**Sub-Thread Output:** Error - Workspace not available for subthread {subthread_id}.\n"
                 else:
-                    # Render normal tool result content
-                    out += f"**Tool Result:** (for call ID: `{tool_result.tool_use_id}`)\n"
-                    tool_output_md = ""
-                    # Check if content is a list or single block
-                    content_list = tool_result.content if isinstance(tool_result.content, list) else [tool_result.content]
-                    for content_block in content_list:
-                        # Important: Use the main render_block for nested content
-                        # This prevents issues if tool results contain images etc.
-                        tool_output_md += render_block(content_block)
-
-                    # Indent the tool output using blockquotes
-                    if tool_output_md.strip():
-                        indented_output = "> " + tool_output_md.replace("\n", "\n> ").strip()
-                        # Remove trailing '> ' if it ends with it
-                        if indented_output.endswith('\n> '):
-                            indented_output = indented_output[:-3]
-                        elif indented_output == '> ': # Handle case of empty rendered output
-                            indented_output = "> *No displayable output*"
-                        out += indented_output + "\n"
+                    out_md += f"**Tool Result:** (for call ID: `{tool_result.tool_use_id}`)\n"
+                    tool_output_md_val = ""
+                    content_list_val = tool_result.content if isinstance(tool_result.content, list) else [tool_result.content]
+                    for content_block_val in content_list_val:
+                        tool_output_md_val += render_block_md(content_block_val)
+                    if tool_output_md_val.strip():
+                        indented_output = "> " + tool_output_md_val.replace("\n", "\n> ").strip()
+                        if indented_output.endswith('\n> '): indented_output = indented_output[:-3]
+                        elif indented_output == '> ': indented_output = "> *No displayable output*"
+                        out_md += indented_output + "\n"
                     else:
-                        out += "> *No displayable output*\n"
+                        out_md += "> *No displayable output*\n"
             else:
-                out += "**Tool Result:** *Pending or Not Available*\n"
-            return out
+                out_md += "**Tool Result:** *Pending or Not Available*\n"
+            return out_md
 
-        # Iterate through messages and render them
-        i = 0
-        while i < len(self.messages):
-            msg = self.messages[i]
-
-            # Skip messages that *only* contain ToolResultBlocks
-            if msg.content and all(isinstance(block, ToolResultBlock) for block in msg.content):
-                i += 1
+        idx = 0
+        while idx < len(self.messages):
+            msg_item = self.messages[idx]
+            if msg_item.content and all(isinstance(b, ToolResultBlock) for b in msg_item.content):
+                idx += 1
                 continue
-
-            # Add a message header that can be used as an anchor
-            md += f"<a id=\"message-{i}\"></a>\n" # HTML anchor for linking
-            md += f"### Message {i} ({msg.role.value.capitalize()})\n\n"
-
-            message_content_md = ""
-
-            # If the next message consists only of ToolResultBlocks, pair them with this message's ToolUseBlocks
-            tool_result_blocks_by_id = {}
-            if (i + 1) < len(self.messages):
-                next_msg = self.messages[i + 1]
-                if next_msg.content and all(isinstance(block, ToolResultBlock) for block in next_msg.content):
-                    for block in next_msg.content:
-                        tool_result_blocks_by_id[block.tool_use_id] = block
-
-            for block in msg.content:
-                if isinstance(block, ToolUseBlock):
-                    tool_result = tool_result_blocks_by_id.get(block.id)
-                    message_content_md += render_block(block, tool_result)
+            md_output += f"<a id=\"message-{idx}\"></a>\n### Message {idx} ({msg_item.role.value.capitalize()})\n\n"
+            message_content_md_val = ""
+            tool_result_blocks_by_id_map = {}
+            if (idx + 1) < len(self.messages):
+                next_msg_item = self.messages[idx + 1]
+                if next_msg_item.content and all(isinstance(b, ToolResultBlock) for b in next_msg_item.content):
+                    for b_item in next_msg_item.content:
+                        tool_result_blocks_by_id_map[b_item.tool_use_id] = b_item # type: ignore
+            for block_val in msg_item.content:
+                if isinstance(block_val, ToolUseBlock):
+                    tool_result_val = tool_result_blocks_by_id_map.get(block_val.id)
+                    message_content_md_val += render_block_md(block_val, tool_result_val)
                 else:
-                    message_content_md += render_block(block)
+                    message_content_md_val += render_block_md(block_val)
+            if message_content_md_val.strip():
+                md_output += message_content_md_val + "\n"
+            if message_content_md_val.strip() or idx < len(self.messages) - 1:
+                md_output += '---\n\n'
+            idx += 1
 
-            # Only add content if it's not empty after rendering
-            if message_content_md.strip():
-                md += message_content_md + "\n"
-            # Add separator only if content was added or it's not the last message
-            if message_content_md.strip() or i < len(self.messages) - 1:
-                md += '---\n\n' # Use horizontal rule for separation
-
-            i += 1
-
-
-        # Write the collected markdown to the file
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(md)
+        with open(output_path, 'w', encoding='utf-8') as f_out:
+            f_out.write(md_output)
+        return output_path # Return the path to the markdown file

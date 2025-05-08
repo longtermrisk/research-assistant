@@ -104,14 +104,14 @@ export interface AgentCreatePayload {
   prompt_template_vars?: Record<string, any> | null;
 }
 
-// For creating a thread (corresponds to ThreadCreateRequest)
+// For creating a thread (corresponds to ThreadCreateRequest on backend)
 export interface ThreadCreatePayload {
   agent_id: string;
-  initial_query: string; // Remains string for now, API needs update for initial images
+  initial_content: ContentBlock[]; // Updated from initial_query: string
   thread_id?: string | null;
 }
 
 // For posting a message (corresponds to MessagePostRequest on backend)
 export interface MessagePostPayload {
-  content: ContentBlock[]; // Updated from query: string
+  content: ContentBlock[];
 }

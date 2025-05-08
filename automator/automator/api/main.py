@@ -1,5 +1,4 @@
 import asyncio
-import json # For creating error message content
 import logging
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
@@ -32,7 +31,7 @@ app.add_middleware(
 )
 logger = logging.getLogger("uvicorn")
 logger.error(
-    "AUTOMATOR.API.MAIN.PY HAS BEEN RELOADED/IMPORTED (v6 with lint fixes and MessagePostRequest update)"
+    "AUTOMATOR.API.MAIN.PY HAS BEEN RELOADED/IMPORTED (v7 with ThreadCreateRequest update)"
 )
 
 # --- Helper Function to Get Existing Workspace ---
@@ -68,7 +67,7 @@ class Broadcaster:
     def __init__(self):
         self.queues: Dict[str, List[asyncio.Queue]] = {}
     async def subscribe(self, thread_id: str) -> asyncio.Queue:
-        if thread_id not in self.queues: 
+        if thread_id not in self.queues:
             self.queues[thread_id] = []
         queue = asyncio.Queue()
         self.queues[thread_id].append(queue)
@@ -115,18 +114,15 @@ class AgentResponse(BaseModel):
     workspace_name: str
     prompt_template_vars: Optional[Dict[str, Any]] = None
 
-# ApiContentBlock for request/response, maps to internal dtypes.ContentBlock
 class ApiContentBlock(BaseModel):
     type: str
     text: Optional[str] = None
-    source: Optional[Dict[str, Any]] = None  # For ImageBlock: {data: str, media_type: str, type: "base64"}
-    # Fields for ToolUseBlock
+    source: Optional[Dict[str, Any]] = None
     id: Optional[str] = None
     input: Optional[Dict[str, Any]] = None
     name: Optional[str] = None
-    # Fields for ToolResultBlock
     tool_use_id: Optional[str] = None
-    content: Optional[List["ApiContentBlock"]] = None  # Recursive for ToolResultBlock's content
+    content: Optional[List["ApiContentBlock"]] = None
     meta: Optional[Dict[str, Any]] = None
 
 class ApiChatMessage(BaseModel):
@@ -142,9 +138,9 @@ class ApiChatMessage(BaseModel):
             api_content_blocks.append(ApiContentBlock(**block_dict))
         return cls(role=chat_message.role, content=api_content_blocks, meta=chat_message.meta)
 
-class ThreadCreateRequest(BaseModel): # Stays as initial_query: str for now
+class ThreadCreateRequest(BaseModel):
     agent_id: str
-    initial_query: str
+    initial_content: List[ApiContentBlock] # Changed from initial_query: str
     thread_id: Optional[str] = None
 
 class ThreadResponse(BaseModel):
@@ -160,7 +156,7 @@ class ThreadDetailResponse(ThreadResponse):
     messages: List[ApiChatMessage]
 
 class MessagePostRequest(BaseModel):
-    content: List[ApiContentBlock] # Changed from query: str
+    content: List[ApiContentBlock]
 
 # --- Helper Functions ---
 def get_default_workspaces_root() -> Path:
@@ -185,15 +181,15 @@ async def run_agent_turn(workspace: Workspace, thread: Thread, initial_run: bool
     except Exception as e:
         logger.error(f"[run_agent_turn] Exception during agent processing for thread '{thread.id}': {e}", exc_info=True)
         error_text = f"An error occurred while processing your request with the agent: {str(e)}"
-        if hasattr(e, "message"): # For openai.APIError and subclasses
+        if hasattr(e, "message"): 
             error_text = f"Agent API Error: {e.message}"
-        elif hasattr(e, "body"): # For some openai errors, body contains JSON info
+        elif hasattr(e, "body"): 
             try:
                 error_body = getattr(e, "body")
                 if error_body and "error" in error_body and "message" in error_body["error"]:
                     error_text = f"Agent API Error: {error_body['error']['message']}"
             except Exception: # pylint: disable=broad-except
-                pass # Ignore parsing errors for the body
+                pass 
 
         error_message_content = [TextBlock(text=error_text)]
         error_chat_message = ChatMessage(role=MessageRole.assistant, content=error_message_content, meta={"error": True})
@@ -310,8 +306,32 @@ async def create_thread_api(thread_data: ThreadCreateRequest, ws: Workspace = De
         raise HTTPException(status_code=404, detail=f"Agent '{thread_data.agent_id}' not found in workspace '{ws.name}'.") from exc
     
     thread_id_to_use = thread_data.thread_id or uuid4().hex
-    thread = await agent.run(query=thread_data.initial_query, thread_id=thread_id_to_use)
-    ws.add_thread(thread=thread, id=thread.id) # Thread ID is already set in agent.run
+    
+    internal_initial_content: List[InternalContentBlock] = []
+    query_for_template: Optional[str] = None
+    if thread_data.initial_content:
+        for api_block in thread_data.initial_content:
+            if api_block.type == "text" and api_block.text is not None:
+                block = TextBlock(text=api_block.text, meta=api_block.meta)
+                internal_initial_content.append(block)
+                if not query_for_template: # Use first text block for template query
+                    query_for_template = api_block.text
+            elif api_block.type == "image" and api_block.source is not None:
+                if not all(k in api_block.source for k in ('data', 'media_type', 'type')) or api_block.source['type'] != 'base64':
+                    raise HTTPException(status_code=400, detail="Invalid image block source in initial_content.")
+                img_src = Base64ImageSource(**api_block.source)
+                internal_initial_content.append(ImageBlock(source=img_src, meta=api_block.meta))
+    
+    if not internal_initial_content: # Fallback or error if content is empty
+        # Depending on desired behavior: error out, or use a default placeholder query
+        raise HTTPException(status_code=400, detail="Initial content for thread creation cannot be empty.")
+
+    thread = await agent.run(
+        query=query_for_template, # For prompt template substitution
+        initial_user_content=internal_initial_content, # For the actual first user message
+        thread_id=thread_id_to_use
+    )
+    ws.add_thread(thread=thread, id=thread.id)
     thread.to_markdown()
 
     asyncio.create_task(run_agent_turn(ws, thread, initial_run=True))
@@ -361,12 +381,12 @@ async def post_message_api(thread_id: str, message_data: MessagePostRequest, ws:
         elif api_block.type == "image" and api_block.source is not None:
             if not all(k in api_block.source for k in ('data', 'media_type', 'type')):
                 raise HTTPException(
-                    status_code=400, 
+                    status_code=400,
                     detail=f"Image block source is missing required fields (data, media_type, type). Received: {api_block.source}"
                 )
             if api_block.source['type'] != 'base64':
                 raise HTTPException(
-                    status_code=400, 
+                    status_code=400,
                     detail=f"Image block source type must be 'base64'. Received: {api_block.source['type']}"
                 )
             img_source = Base64ImageSource(
@@ -375,21 +395,22 @@ async def post_message_api(thread_id: str, message_data: MessagePostRequest, ws:
                 type=api_block.source['type']
             )
             internal_content_blocks.append(ImageBlock(source=img_source, meta=api_block.meta))
-        # Not expecting tool_use or tool_result from user directly here.
 
     if not internal_content_blocks:
         raise HTTPException(status_code=400, detail="Message content cannot be empty.")
 
     user_message = ChatMessage(role=MessageRole.user, content=internal_content_blocks)
-    thread.messages.append(user_message)
+    # Pass the rich content to thread.run
+    await thread.run(user_content=internal_content_blocks) 
+    # thread.run now appends the message, so we don't do it here explicitly.
 
     ws.add_thread(thread=thread, id=thread.id)
     thread.to_markdown()
 
-    api_user_msg = ApiChatMessage.from_chat_message(user_message)
+    api_user_msg = ApiChatMessage.from_chat_message(user_message) # user_message is the one we just constructed
     await broadcaster.broadcast(thread.id, api_user_msg.model_dump_json())
 
-    if not thread._ready: # Accessing protected member, consider a public method or property
+    if not thread._ready:
         await thread.prepare()
     asyncio.create_task(run_agent_turn(ws, thread, initial_run=False))
     return api_user_msg
