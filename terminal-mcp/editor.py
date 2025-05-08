@@ -353,14 +353,3 @@ async def list_codebase_files(
         print(f"Error listing files in '{codebase_path}': {e}")
         return f"An error occurred while listing files in '{codebase_path}': {e}"
 
-
-async def debug():
-    kwargs = {
-        "content": "{\n  \"name\": \"automator-frontend\",\n  \"private\": true,\n  \"version\": \"0.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"dev\": \"vite\",\n    \"build\": \"tsc && vite build\",\n    \"lint\": \"eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0\",\n    \"preview\": \"vite preview\"\n  },\n  \"dependencies\": {\n    \"react\": \"^18.2.0\",\n    \"react-dom\": \"^18.2.0\",\n    \"react-router-dom\": \"^6.22.3\"\n  },\n  \"devDependencies\": {\n    \"@types/react\": \"^18.2.64\",\n    \"@types/react-dom\": \"^18.2.21\",\n    \"@typescript-eslint/eslint-plugin\": \"^7.1.1\",\n    \"@typescript-eslint/parser\": \"^7.1.1\",\n    \"@vitejs/plugin-react\": \"^4.2.1\",\n    \"eslint\": \"^8.57.0\",\n    \"eslint-plugin-react-hooks\": \"^4.6.0\",\n    \"eslint-plugin-react-refresh\": \"^0.4.5\",\n    \"typescript\": \"^5.2.2\",\n    \"vite\": \"^5.1.6\"\n  }\n}",
-        "path": "frontend/package.json"
-    }
-    await write_file(**kwargs)
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(debug())

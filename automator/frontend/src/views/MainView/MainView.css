@@ -30,6 +30,7 @@
   word-wrap: break-word;
   background-color: var(--background-tertiary); /* Default for assistant */
   border: 1px solid var(--border-secondary);
+  position: relative; /* For positioning the copy button */
 }
 
 .message-bubble.user {
@@ -67,7 +68,22 @@
   color: var(--foreground-secondary);
 }
 
-/* Content Block Styling - basic for now */
+.copy-button {
+  background: var(--button-secondary-background);
+  color: var(--button-secondary-foreground);
+  border: 1px solid var(--border-secondary);
+  padding: 3px 8px;
+  font-size: 0.75em;
+  border-radius: 3px;
+  cursor: pointer;
+  margin-left: 10px; /* Add some space from the role text */
+}
+
+.copy-button:hover {
+  opacity: 0.8;
+}
+
+/* Content Block Styling */
 .text-block {
   white-space: pre-wrap; /* Preserve whitespace and newlines */
   line-height: 1.6;
@@ -105,6 +121,17 @@
 
 .tool-result-block {
   border-left: 3px solid var(--foreground-accent);
+}
+
+.subagent-link {
+  margin-top: 5px;
+  margin-bottom: 8px;
+  font-size: 0.9em;
+}
+
+.subagent-link a {
+  color: var(--foreground-accent);
+  text-decoration: underline;
 }
 
 /* Scroll buttons */

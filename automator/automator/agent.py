@@ -66,7 +66,8 @@ class Agent:
             workspace.register_agent(agent=self, id=id)
     
     
-    async def run(self, query: Optional[str]=None, temperature: float = 0.7, max_tokens: int = 8000, thread_id: Optional[str] = None, **prompt_template):
+    async def run(self, query: Optional[str]=None, temperature: float = 0.7, max_tokens: int = None, thread_id: Optional[str] = None, **prompt_template):
+        max_tokens = max_tokens or 8000 if not 'haiku' in self.model else 4000
         _vars = dict(**self.prompt_template_vars, **prompt_template)
         # Query can be None if we are just re-running a thread without a new user message
         messages_to_apply = {"query": query} if query is not None else {}
@@ -144,19 +145,15 @@ class SubagentTool:
         
     async def prepare(self, tool_use_block: ToolUseBlock):
         agent_input = tool_use_block.input or {}
-        thread_id = agent_input.pop('thread_id', None)
-        query = agent_input.pop('query', None) # Ensure query is extracted
+        thread_id = agent_input.get('thread_id', None)
 
         if thread_id and thread_id in self.parent._threads:
             sub_thread = self.parent._threads[thread_id]
             # If query is provided, it's a new message to existing sub-thread
             # The run method of Thread should handle appending the query if provided
-            await sub_thread.run(query=query if query else None) 
+            await sub_thread.run(**agent_input) 
         else:
-            sub_thread = await self.agent.run(
-                query=query, # Pass query to new sub-thread run
-                **agent_input # Pass remaining args which might be for prompt_template
-            )
+            sub_thread = await self.agent.run(**agent_input )
             thread_id = sub_thread.id
             self.parent._threads[thread_id] = sub_thread
         return SubagentToolCall(name=self.name, thread=sub_thread, tool_use_block=tool_use_block)

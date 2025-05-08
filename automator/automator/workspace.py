@@ -69,8 +69,22 @@ class Workspace:
             _ensure_dir(self._thread_dir)
 
         self.env: Dict[str, str] = {'CWD': str(self._root_dir / 'workspace')}
+
+        try:
+            with open(self._root_dir / "env.json", "r") as f:
+                env_data = json.load(f)
+                self.env.update(env_data)
+        except FileNotFoundError:
+            pass
+
         if env is not None:
             self.env.update(env)
+        
+        # Save the env
+        with open(self._root_dir / "env.json", "w") as f:
+            json.dump(self.env, f, ensure_ascii=False, indent=2)
+            
+        # Ensure the workspace directory exists
         os.makedirs(self.env['CWD'], exist_ok=True)
 
     @staticmethod

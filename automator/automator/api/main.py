@@ -12,9 +12,6 @@ import json # For creating error message content
 from automator.workspace import Workspace
 from automator.agent import Agent, Thread
 from automator.dtypes import ToolDefinition, ChatMessage, MessageRole, TextBlock, ContentBlock
-# Assuming openai.BadRequestError might be raised by llm.py
-# To handle it explicitly, we might need to import it or a common base error from llm.py
-# For now, we'll catch a generic Exception from the LLM interaction part.
 
 from fastapi.middleware.cors import CORSMiddleware
 

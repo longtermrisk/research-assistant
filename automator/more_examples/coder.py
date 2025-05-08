@@ -67,6 +67,7 @@ def get_codebase(path='.', ignore_patterns=[], shortfile_patterns=[]):
 
 
 
+
 async def main() -> None:
     workspace = Workspace('automator', env={
         'CWD': '/Users/nielswarncke/Documents/researchoor/automator'
@@ -92,12 +93,13 @@ async def main() -> None:
         id='coder',
         # subagents=['codebase'],
     )
-
-    query = input("Query> ")
+    with open('task.md', 'r') as f:
+        query = f.read()
     query += "\n\nHere is the current codebase:\n" + get_codebase(
         shortfile_patterns=["prompts/", "*.lock"],
         ignore_patterns=["more_examples/", "task.md"]
     )
+    input(query)
 
     thread = await agent.run(query) # Can you evaluate if `Qwen/Qwen3-8B` is pro animal-welfare in a non-trivial way? How does it compare to gpt-4.1?
     
