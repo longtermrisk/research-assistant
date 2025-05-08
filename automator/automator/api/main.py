@@ -151,6 +151,7 @@ class ThreadResponse(BaseModel):
     subagents: List[str]
     workspace_name: str
     initial_messages_count: int
+    first_user_message_preview: Optional[str] = None
 
 class ThreadDetailResponse(ThreadResponse):
     messages: List[ApiChatMessage]
@@ -333,11 +334,14 @@ async def create_thread_api(thread_data: ThreadCreateRequest, ws: Workspace = De
     )
     ws.add_thread(thread=thread, id=thread.id)
     thread.to_markdown()
+    
+    first_user_message_preview = thread.get_first_user_message_preview()
 
     asyncio.create_task(run_agent_turn(ws, thread, initial_run=True))
     return ThreadResponse(
         id=thread.id, model=thread.model, tools=thread._tools, env=thread.env, subagents=thread.subagents,
-        workspace_name=ws.name, initial_messages_count=len(thread.messages)
+        workspace_name=ws.name, initial_messages_count=len(thread.messages),
+        first_user_message_preview=first_user_message_preview
     )
 
 @app.get("/workspaces/{workspace_name}/threads", response_model=List[ThreadResponse])
@@ -347,9 +351,12 @@ async def list_threads_api(ws: Workspace = Depends(get_workspace_dependency)):
     for t_id in thread_ids:
         try:
             thread = ws.get_thread(id=t_id)
+            first_user_message_preview = thread.get_first_user_message_preview()
             thread_responses.append(ThreadResponse(
                 id=thread.id, model=thread.model, tools=thread._tools, env=thread.env,
-                subagents=thread.subagents, workspace_name=ws.name, initial_messages_count=len(thread.messages)
+                subagents=thread.subagents, workspace_name=ws.name, 
+                initial_messages_count=len(thread.messages),
+                first_user_message_preview=first_user_message_preview
             ))
         except Exception as e:
             logger.error(f"Error loading thread {t_id} in {ws.name}: {e}", exc_info=True)
@@ -361,10 +368,15 @@ async def get_thread_details_api(thread_id: str, ws: Workspace = Depends(get_wor
         thread = ws.get_thread(id=thread_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Thread '{thread_id}' not found in workspace '{ws.name}'.") from exc
+    
     api_messages = [ApiChatMessage.from_chat_message(msg) for msg in thread.messages]
+    first_user_message_preview = thread.get_first_user_message_preview()
+    
     return ThreadDetailResponse(
         id=thread.id, model=thread.model, tools=thread._tools, env=thread.env, subagents=thread.subagents,
-        workspace_name=ws.name, messages=api_messages, initial_messages_count=len(thread.messages)
+        workspace_name=ws.name, messages=api_messages, 
+        initial_messages_count=len(thread.messages),
+        first_user_message_preview=first_user_message_preview
     )
 
 @app.post("/workspaces/{workspace_name}/threads/{thread_id}/messages", response_model=ApiChatMessage)

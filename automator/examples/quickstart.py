@@ -24,6 +24,7 @@ async def main() -> None:
         thread = await (thread or bash_agent).run(query)
         async for message in thread:
             print(message)
+        breakpoint()
     workspace.add_thread(thread=thread, id=input("Thread ID: "))
 
     await thread.cleanup()

@@ -1,8 +1,1 @@
-Can you implement the following improvements for the frontend?
-
-# Sending messages with multilines and images
-- user message text area: make it grow when input is multiline
-- user message text area: allow sending images (drag and drop and copy&paste should both work)
-- it should be possible to send any number of images in one message
-
-This might require changes to the backend.
+The threads-sidebar currently shows uuids, which is not so pretty. Instead, we should show the first couple of words from the first user message. Can you implement that? It may require changes to backend and frontend, but should be simple.

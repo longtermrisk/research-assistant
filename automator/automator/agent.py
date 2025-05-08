@@ -82,7 +82,7 @@ class Agent:
         messages = self.prompt_template.apply(dict(messages_to_apply, **_vars))
         init, template_content = messages[:-1], messages[-1].content
         ## Remove content blocks that contain $query
-        template_content = [c for c in template_content if not (isinstance(c, TextBlock) and "$query" in c.text)]
+        template_content = [c for c in template_content if not (isinstance(c, TextBlock) and c.text.strip() == "$query")]
         user_message = ChatMessage(role=MessageRole.user, content=(initial_user_content or []) + template_content)
         
         thread = Thread(
@@ -289,6 +289,25 @@ class Thread:
             self.messages.append(ChatMessage(role=MessageRole.user, content=[TextBlock(text=query)]))
         return self
     
+    def get_first_user_message_preview(self, max_words: int = 7) -> Optional[str]:
+        first_user_message = next((msg for msg in self.messages if msg.role == MessageRole.user), None)
+        if not first_user_message:
+            return None
+
+        text_parts = []
+        for block in first_user_message.content:
+            if isinstance(block, TextBlock):
+                text_parts.append(block.text.strip())
+        
+        full_text = " ".join(text_parts).strip()
+        if not full_text:
+            return None
+
+        words = full_text.split()
+        if len(words) > max_words:
+            return " ".join(words[:max_words]) + "..."
+        return full_text
+
     def json(self):
         return {"model": self.model, "messages": [m.model_dump() for m in self.messages], "tools": self._tools,
                 "temperature": self.temperature, "max_tokens": self.max_tokens, "env": self.env,

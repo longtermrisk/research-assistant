@@ -81,11 +81,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 key={thread.id} 
                 to={`/workspace/${workspaceNameForLinks}/thread/${thread.id}`}
                 className={`thread-item ${params.threadId === thread.id ? 'active' : ''}`}
-                title={thread.id} // Show full ID on hover
+                title={thread.first_user_message_preview || thread.id} // Show full preview or ID on hover
               >
-                {/* Task: show the first words of the first user message. Needs backend change or fetch details.
-                    For now, just showing thread ID or a placeholder. */}
-                Thread {thread.id.substring(0, 8)}...
+                {thread.first_user_message_preview || `Thread ${thread.id.substring(0, 8)}...`}
               </Link>
             ))}
           </nav>
