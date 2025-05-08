@@ -224,6 +224,20 @@ async def write_file(
         warning = validate_content(cleaned_content)
         if warning:
             return warning # Return warning and stop
+    
+    # If it's a json file, ensure it's valid JSON
+    if path.endswith(".json"):
+        try:
+            json.loads(cleaned_content)
+        except json.JSONDecodeError as e:
+            return f"Error: Invalid JSON content in {path}: {e}"
+
+    # If it's a CSV file, ensure it's valid CSV
+    elif path.endswith(".csv"):
+        try:
+            pd.read_csv(io.StringIO(cleaned_content))
+        except pd.errors.ParserError as e:
+            return f"Error: Invalid CSV content in {path}: {e}"
 
     try:
         with open(full_path, "w", encoding='utf-8') as f:
@@ -314,7 +328,7 @@ async def list_codebase_files(
 
         if not repo_processed: # Fallback for non-git dirs or if git failed
              # Basic ignore: .git, node_modules, __pycache__, and our image dir
-            ignored_dirs = {'.git', 'node_modules', '__pycache__', EXTRACTED_IMAGES_SUBDIR}
+            ignored_dirs = {'.git', 'node_modules', '__pycache__'}
             for root, dirs, filenames in os.walk(full_codebase_path, topdown=True):
                 rel_root = os.path.relpath(root, full_codebase_path)
                 # Exclude ignored and hidden dirs
@@ -338,3 +352,15 @@ async def list_codebase_files(
         # Log the error maybe? ctx.error(...) ?
         print(f"Error listing files in '{codebase_path}': {e}")
         return f"An error occurred while listing files in '{codebase_path}': {e}"
+
+
+async def debug():
+    kwargs = {
+        "content": "{\n  \"name\": \"automator-frontend\",\n  \"private\": true,\n  \"version\": \"0.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"dev\": \"vite\",\n    \"build\": \"tsc && vite build\",\n    \"lint\": \"eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0\",\n    \"preview\": \"vite preview\"\n  },\n  \"dependencies\": {\n    \"react\": \"^18.2.0\",\n    \"react-dom\": \"^18.2.0\",\n    \"react-router-dom\": \"^6.22.3\"\n  },\n  \"devDependencies\": {\n    \"@types/react\": \"^18.2.64\",\n    \"@types/react-dom\": \"^18.2.21\",\n    \"@typescript-eslint/eslint-plugin\": \"^7.1.1\",\n    \"@typescript-eslint/parser\": \"^7.1.1\",\n    \"@vitejs/plugin-react\": \"^4.2.1\",\n    \"eslint\": \"^8.57.0\",\n    \"eslint-plugin-react-hooks\": \"^4.6.0\",\n    \"eslint-plugin-react-refresh\": \"^0.4.5\",\n    \"typescript\": \"^5.2.2\",\n    \"vite\": \"^5.1.6\"\n  }\n}",
+        "path": "frontend/package.json"
+    }
+    await write_file(**kwargs)
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(debug())

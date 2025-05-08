@@ -1,0 +1,113 @@
+.workspace-selection-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 20px;
+  background-color: var(--background-primary);
+}
+
+.workspace-selection-box {
+  background-color: var(--background-secondary);
+  padding: 30px 40px;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 600px;
+  border: 1px solid var(--border-primary);
+}
+
+.workspace-selection-box h1 {
+  color: var(--foreground-primary);
+  text-align: center;
+  margin-bottom: 30px;
+  font-size: 1.8em;
+}
+
+.workspace-selection-box h2 {
+  color: var(--foreground-primary);
+  margin-top: 25px;
+  margin-bottom: 15px;
+  font-size: 1.3em;
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: 8px;
+}
+
+.workspace-list-section ul {
+  list-style: none;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+}
+
+.workspace-list-section li {
+  margin: 0;
+}
+
+.workspace-button {
+  display: block;
+  width: 100%;
+  padding: 12px 15px;
+  background-color: transparent;
+  color: var(--foreground-primary);
+  border: none;
+  border-bottom: 1px solid var(--border-secondary);
+  text-align: left;
+  cursor: pointer;
+  font-size: 1em;
+}
+
+.workspace-list-section li:last-child .workspace-button {
+  border-bottom: none;
+}
+
+.workspace-button:hover {
+  background-color: var(--background-hover);
+}
+
+.workspace-button .workspace-path {
+  font-size: 0.85em;
+  color: var(--foreground-secondary);
+  margin-left: 8px;
+}
+
+.workspace-create-section form {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.workspace-create-section input[type="text"] {
+  flex-grow: 1;
+  padding: 10px;
+  font-size: 1em;
+}
+
+.workspace-create-section button {
+  padding: 10px 15px;
+  font-size: 1em;
+}
+
+.error-text {
+  color: var(--error-color);
+  margin: 10px 0;
+  text-align: center;
+}
+
+/* Custom scrollbar for the list */
+.workspace-list-section ul::-webkit-scrollbar {
+  width: 8px;
+}
+.workspace-list-section ul::-webkit-scrollbar-track {
+  background: var(--background-tertiary);
+  border-radius: 4px;
+}
+.workspace-list-section ul::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-background);
+  border-radius: 4px;
+}
+.workspace-list-section ul::-webkit-scrollbar-thumb:hover {
+  background: #686868;
+}

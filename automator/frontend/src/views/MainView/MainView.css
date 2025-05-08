@@ -1,0 +1,206 @@
+.chat-view-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%; /* Fill AppLayout's main content area */
+  background-color: var(--background-primary);
+}
+
+.loading-chat, .error-message {
+  padding: 20px;
+  text-align: center;
+  color: var(--foreground-secondary);
+}
+.error-message {
+  color: var(--error-color);
+}
+
+.messages-area {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.message-bubble {
+  padding: 10px 15px;
+  border-radius: 8px;
+  max-width: 80%;
+  word-wrap: break-word;
+  background-color: var(--background-tertiary); /* Default for assistant */
+  border: 1px solid var(--border-secondary);
+}
+
+.message-bubble.user {
+  background-color: var(--background-selected); /* Slightly different for user */
+  color: var(--foreground-primary); /* Ensure contrast if background-selected is light */
+  align-self: flex-end;
+}
+
+.message-bubble.assistant {
+  align-self: flex-start;
+}
+
+.message-bubble.system {
+  align-self: center;
+  background-color: var(--background-secondary);
+  font-style: italic;
+  color: var(--foreground-secondary);
+  max-width: 100%;
+  text-align: center;
+  font-size: 0.9em;
+}
+
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.message-header .role {
+  font-weight: bold;
+  font-size: 0.85em;
+  color: var(--foreground-secondary);
+}
+
+/* Content Block Styling - basic for now */
+.text-block {
+  white-space: pre-wrap; /* Preserve whitespace and newlines */
+  line-height: 1.6;
+}
+
+.image-block img {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 4px;
+  margin-top: 5px;
+}
+
+.tool-use-block, .tool-result-block, .tool-cycle-block {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 4px;
+  background-color: rgba(0,0,0,0.1); /* Slightly darker shade within bubble */
+}
+
+.tool-use-block strong, .tool-result-block strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--foreground-accent);
+}
+
+.tool-use-block pre {
+  background-color: var(--background-primary); /* Match editor background */
+  color: var(--foreground-primary);
+  padding: 8px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: var(--font-family-monospace);
+  font-size: 0.9em;
+}
+
+.tool-result-block {
+  border-left: 3px solid var(--foreground-accent);
+}
+
+/* Scroll buttons */
+.scroll-buttons {
+  position: absolute;
+  bottom: 70px; /* Above message input */
+  right: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  z-index: 10;
+}
+
+.scroll-buttons button {
+  background-color: var(--button-secondary-background);
+  color: var(--button-secondary-foreground);
+  border: 1px solid var(--border-secondary);
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8em;
+}
+
+.scroll-buttons button:hover {
+  opacity: 0.9;
+}
+
+
+/* Message Input Area */
+.message-input-area {
+  display: flex;
+  padding: 10px 15px;
+  border-top: 1px solid var(--border-primary);
+  background-color: var(--background-secondary);
+}
+
+.message-input-area textarea {
+  flex-grow: 1;
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid var(--input-border);
+  background-color: var(--input-background);
+  color: var(--input-foreground);
+  font-family: var(--font-family-main);
+  font-size: 1em;
+  resize: none; /* Disable manual resize, will grow with content */
+  min-height: 24px; /* Approx 1 line height + padding */
+  max-height: 200px; /* Limit growth */
+  overflow-y: auto; /* Scroll if content exceeds max-height */
+}
+
+.message-input-area button {
+  margin-left: 10px;
+  padding: 10px 15px;
+  background-color: var(--button-primary-background);
+  color: var(--button-primary-foreground);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.message-input-area button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* New Thread Agent Selection */
+.new-thread-agent-selection {
+  padding: 20px;
+  text-align: center;
+}
+
+.new-thread-agent-selection h2 {
+  margin-bottom: 20px;
+  color: var(--foreground-primary);
+}
+
+.agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.agent-select-button {
+  padding: 12px 15px;
+  background-color: var(--button-secondary-background);
+  color: var(--button-secondary-foreground);
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 1em;
+}
+
+.agent-select-button:hover {
+  background-color: var(--background-hover);
+}

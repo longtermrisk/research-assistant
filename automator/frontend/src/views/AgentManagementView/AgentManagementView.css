@@ -1,0 +1,120 @@
+.agent-management-container {
+  padding: 20px;
+}
+
+.agent-management-container .header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.agent-management-container h1 {
+  color: var(--foreground-primary);
+  font-size: 1.8em;
+}
+
+.create-agent-form {
+  background-color: var(--background-secondary);
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 30px;
+  border: 1px solid var(--border-primary);
+}
+
+.create-agent-form h2 {
+  color: var(--foreground-primary);
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 1.4em;
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: 10px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px 20px; /* row-gap column-gap */
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1; /* Span across all columns */
+}
+
+.form-group label {
+  margin-bottom: 5px;
+  font-weight: 500;
+  color: var(--foreground-secondary);
+  font-size: 0.9em;
+}
+
+.form-group input[type="text"],
+.form-group input[type="password"],
+.form-group input[type="email"],
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 10px;
+  font-size: 1em;
+  background-color: var(--input-background);
+  color: var(--input-foreground);
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+}
+
+.submit-agent-btn {
+  margin-top: 20px;
+  padding: 10px 20px;
+  font-size: 1em;
+}
+
+.agents-list-container h2 {
+  font-size: 1.4em;
+  color: var(--foreground-primary);
+  margin-bottom: 15px;
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: 10px;
+}
+
+.agents-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.agent-item {
+  background-color: var(--background-tertiary);
+  padding: 15px 20px;
+  border-radius: 6px;
+  border: 1px solid var(--border-secondary);
+}
+
+.agent-item h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: var(--foreground-accent);
+  font-size: 1.2em;
+}
+
+.agent-item p {
+  margin-bottom: 5px;
+  font-size: 0.95em;
+  color: var(--foreground-primary);
+}
+
+.agent-item p strong {
+  color: var(--foreground-secondary);
+  margin-right: 5px;
+}
+
+.error-text {
+  color: var(--error-color);
+  margin: 10px 0;
+}

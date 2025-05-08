@@ -7,7 +7,10 @@ from automator.workspace import Workspace
 from automator.dtypes import ChatMessage, ToolUseBlock
 
 
-setup_env = """git clone https://github.com/longtermrisk/openweights.git
+setup_env = """
+mkdir packages
+cd packages
+git clone https://github.com/longtermrisk/openweights.git
 cd openweights
 uv pip install -e .
 cd ..
@@ -18,27 +21,24 @@ cd .."""
 
 
 async def main() -> None:
-    workspace = Workspace('research-assistant', env={
-        'CWD': '../research-assistant'
+    workspace = Workspace('my-workspace', env={
+        'CWD': '../workspace'
     })
     evaluator = Agent(
         # model="claude-3-7-sonnet-20250219",
-        model='gpt-4.1',
+        model='google/gemini-2.5-pro-preview',
         prompt_template_yaml="prompts/evaluator.yaml",
         tools=[
-            "talk2model.*",
+            "talk2model.send_message",
             "terminal.*",
         ],
     )
     evaluator = workspace.add_agent(agent=evaluator, id="evaluator")
     thread = await evaluator.run(input("Query> "))
+
     # Slightly hacky way to setup the agent's environment
-    setup_msg = ChatMessage(role='user', content=[ToolUseBlock(id='123', name='terminal_execute', input={'command': setup_env, 'detach_after_seconds': 300})])
-    setup_logs, _ = await thread.process_message(setup_msg)
-    print('==' * 30 + ' Setup Logs ' + '==' * 30)
-    print(setup_logs.content[0].content[0].text)
-    print('==' * 80)
-    
+    output = await thread.tool_call('terminal_execute', {'command': setup_env})
+
     while True:
         async for message in thread:
             print(message)

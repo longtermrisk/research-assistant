@@ -34,113 +34,59 @@ from __future__ import annotations
 
 import json
 import os
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from automator.agent import Agent , Thread
 from automator.dtypes import ChatMessage
 
+logger = logging.getLogger("uvicorn") # Or your preferred logger
+logger.error("AUTOMATOR.WORKSPACE.PY HAS BEEN RELOADED/IMPORTED (v2 with self.name)") # PROOF OF RELOAD
 
 def _ensure_dir(path: Path) -> None:
-    """Recursively create *path* if it does not yet exist."""
-
     path.mkdir(parents=True, exist_ok=True)
 
-
 def _slugify(name: str) -> str:
-    """Return *name* converted into a filename-friendly slug.
-
-    The exact implementation does not have to be perfect – it is only
-    meant to guarantee that we end up with a valid filename for the
-    most common inputs.
-    """
-
-    # Replace os-specific path separators first so we do not accidentally
-    # introduce nested paths.
     for sep in (os.sep, os.altsep):
         if sep:
             name = name.replace(sep, "-")
-
-    # Very small whitelist, everything else becomes a dash.
     allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
     return "".join(c if c in allowed else "-" for c in name).strip("-_.")
 
-
-###############################################################################
-# Workspace implementation
-###############################################################################
-
-
 class Workspace:
-    """A persistent workspace grouping together agents and threads."""
-
-    ############################################################
-    # Construction helpers
-    ############################################################
-
     def __init__(self, name: str, env: Optional[Dict[str, str]] = None):
-        """Create (or load) a workspace called *name*.
-
-        Parameters
-        ----------
-        name:
-            *Absolute* paths are taken verbatim.  If *name* is not an
-            absolute path the workspace will be created under the
-            *default workspace root* ``~/.automator/workspaces``.
-        env:
-            Optional environment overrides that will be *merged into*
-            every agent attached to the workspace (i.e. values in
-            ``env`` take precedence over an agent's existing ``env``
-            mapping).
-        """
-
+        self.name = name # Store the original name
         self._root_dir: Path = self._resolve_workspace_dir(name)
         
-        # Make sure the directory tree exists so that subsequent save
-        # operations cannot fail.  Falling back to a workspace inside the
-        # *current working directory* when the preferred location is not
-        # writable allows Automator to function in restricted execution
-        # environments (e.g. read-only home directories).
         try:
             _ensure_dir(self._agent_dir)
             _ensure_dir(self._thread_dir)
         except PermissionError:
-            # Replace root dir with a CWD-based fallback and try again.
-            self._root_dir = Path.cwd() / ".automator_workspaces" / Path(name)
+            # Fallback if default location is not writable
+            self._root_dir = Path.cwd() / ".automator_workspaces" / Path(name).name # Use original name for fallback path part
             _ensure_dir(self._agent_dir)
             _ensure_dir(self._thread_dir)
 
         self.env: Dict[str, str] = {'CWD': str(self._root_dir / 'workspace')}
-        self.env.update(env)
+        if env is not None:
+            self.env.update(env)
         os.makedirs(self.env['CWD'], exist_ok=True)
-
-    # ---------------------------------------------------------------------
-    # Filesystem helpers
-    # ---------------------------------------------------------------------
 
     @staticmethod
     def _resolve_workspace_dir(name: str) -> Path:
-        """Return a fully-qualified path for *name*.
-
-        The logic follows what was described above in ``__init__``.
-        """
-
         p = Path(name).expanduser()
         if p.is_absolute():
             return p
         return Path.home() / ".automator" / "workspaces" / p
 
-    # Directories ----------------------------------------------------------------
-
     @property
-    def _agent_dir(self) -> Path:  # noqa: D401  (simple property)
+    def _agent_dir(self) -> Path:
         return self._root_dir / "agents"
 
     @property
-    def _thread_dir(self) -> Path:  # noqa: D401
+    def _thread_dir(self) -> Path:
         return self._root_dir / "threads"
-
-    # Filename helpers -----------------------------------------------------------
 
     def _agent_path(self, agent_id: str) -> Path:
         return self._agent_dir / f"{_slugify(agent_id)}.json"
@@ -148,143 +94,104 @@ class Workspace:
     def _thread_path(self, thread_id: str) -> Path:
         return self._thread_dir / f"{_slugify(thread_id)}.json"
 
-    ############################################################
-    # Agent helpers
-    ############################################################
     def register_agent(self, *, agent: Agent, id: str) -> None:
-        """Persist *agent* under *id* (overwriting existing agents).
-        The agent's environment is merged with the workspace's
-        environment overrides.
-        Unlike *add_agent* this method does not return a new agent
-        instance but modifies the original one in place.
-        """
-        # Merge environments – workspace overrides agent.
         agent.env = {**agent.env, **self.env}
-        agent.workspace = self
+        agent.workspace = self # Assign the workspace instance
+        agent.id = id # Ensure agent has its ID
         self._save_json(self._agent_path(id), agent.json())
 
     def add_agent(self, *, agent: Agent, id: str) -> Agent:
-        """Attach *agent* to the workspace under *id*.
-
-        The workspace's environment overrides are merged **into** the
-        agent (values already set on the agent win unless they are
-        overwritten by *workspace.env*).
-        """
-        # Merge environments – workspace overrides agent.
-        merged_env = {**agent.env, **self.env}
-
-        # If nothing changed we can reuse the same instance.  Otherwise
-        # create a shallow *copy* so the original remains untouched.
-        if merged_env is agent.env:
-            updated_agent = agent
-        else:
-            updated_agent = Agent(
-                model=agent.model,
-                prompt_template_yaml=agent.prompt_template_yaml,
-                tools=list(agent.tools),
-                env=merged_env,
-                subagents=list(agent.subagents),
-                as_tool=agent.as_tool,
-                workspace=self,
-            )
-
+        merged_env = {**agent.env, **self.env} # Workspace env overrides agent on conflict
+        
+        # Create a new Agent instance to ensure it's clean and has the merged_env
+        # and correct workspace association and ID.
+        updated_agent = Agent(
+            model=agent.model,
+            prompt_template_yaml=agent.prompt_template_yaml,
+            tools=list(agent.tools) if agent.tools else [],
+            env=merged_env,
+            subagents=list(agent.subagents) if agent.subagents else [],
+            as_tool=agent.as_tool, # This should be a dict or ToolDefinition model
+            workspace=self, # Assign this workspace instance
+            id=id,
+            prompt_template_vars=getattr(agent, 'prompt_template_vars', None) 
+        )
         self._save_json(self._agent_path(id), updated_agent.json())
         return updated_agent
 
-    # ------------------------------------------------------------------
     def get_agent(self, id: str) -> Agent:
-        """Load and return the agent registered under *id*."""
-
         path = self._agent_path(id)
         if not path.exists():
-            raise KeyError(f"Agent '{id}' not found in workspace '{self._root_dir}'.")
-
+            raise KeyError(f"Agent '{id}' not found in workspace '{self.name}'.")
         data = self._load_json(path)
+        
+        # The env stored in agent JSON is already merged by add_agent.
+        # For get_agent, we want to reflect that persisted state, potentially re-applying current workspace.env overrides.
+        # The current workspace instance's self.env should take precedence for CWD or any live overrides.
+        persisted_agent_env = data.get("env", {})
+        final_env = {**persisted_agent_env, **self.env} # Current workspace env overrides anything, including persisted CWD
 
-        # Merge persisted env with current workspace overrides.  The
-        # workspace should *always* win because it represents the user's
-        # latest intention.
-        env = {**data.get("env", {}), **self.env}
-
-        return Agent(
+        loaded_agent = Agent(
             model=data["model"],
             prompt_template_yaml=data["prompt_template"],
-            tools=data["tools"],
-            env=env,
+            tools=data.get("tools", []),
+            env=final_env,
             subagents=data.get("subagents", []),
             as_tool=data.get("as_tool"),
-            workspace=self,
+            workspace=self, # Assign this workspace instance
+            id=id,
+            prompt_template_vars=data.get("prompt_template_vars")
         )
+        return loaded_agent
 
-    # ------------------------------------------------------------------
     def list_agents(self, *, limit: int | None = None) -> List[str]:
-        """Return a list of agent IDs currently stored in the workspace."""
-
+        if not self._agent_dir.exists(): return []
         files = sorted(self._agent_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
         ids = [f.stem for f in files]
         return ids[:limit] if limit is not None else ids
 
-    ############################################################
-    # Thread helpers
-    ############################################################
-
     def add_thread(self, *, thread: Thread, id: str) -> None:
-        """Persist *thread* under *id* (overwriting existing threads)."""
-        # Ensure environment is up-to-date.
-        thread.env = {**thread.env, **self.env}
+        thread.env = {**thread.env, **self.env} # Merge with current workspace env
         thread.workspace = self
+        thread.id = id
         self._save_json(self._thread_path(id), thread.json())
 
-    # ------------------------------------------------------------------
     def get_thread(self, id: str) -> Thread:
-        """Load and return the thread saved under *id*."""
-
         path = self._thread_path(id)
         if not path.exists():
-            raise KeyError(f"Thread '{id}' not found in workspace '{self._root_dir}'.")
-
+            raise KeyError(f"Thread '{id}' not found in workspace '{self.name}'.")
         data = self._load_json(path)
-
-        # ----- messages --------------------------------------------------
         messages = [ChatMessage(**m) for m in data["messages"]]
+        
+        persisted_thread_env = data.get("env", {})
+        final_env = {**persisted_thread_env, **self.env} # Current workspace env overrides
 
-        # ----- reconstruct Thread ---------------------------------------
-        env = {**data.get("env", {}), **self.env}
-
-        thread = Thread(
+        thread_obj = Thread(
             model=data["model"],
-            tools=data["tools"],
+            tools=data.get("tools", []),
             messages=messages,
-            env=env,
+            env=final_env,
             temperature=data.get("temperature", 0.7),
             max_tokens=data.get("max_tokens", 8000),
             workspace=self,
             subagents=data.get("subagents", []),
             id=id
         )
+        for thread_id_sub in data.get("thread_ids", []):
+            try:
+                thread_obj._threads[thread_id_sub] = self.get_thread(thread_id_sub)
+            except KeyError:
+                logger.warning(f"Sub-thread {thread_id_sub} not found while loading thread {id} in workspace {self.name}")
+        return thread_obj
 
-        # Load subagent threads
-        for thread_id in data.get("thread_ids", []):
-            thread._threads[thread_id] = self.get_thread(thread_id)
-
-        return thread
-
-    # ------------------------------------------------------------------
     def list_threads(self, *, limit: int | None = None) -> List[str]:
-        """Return a list of thread IDs currently stored in the workspace."""
-
+        if not self._thread_dir.exists(): return []
         files = sorted(self._thread_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
         ids = [f.stem for f in files]
         return ids[:limit] if limit is not None else ids
 
-    ############################################################
-    # Persistence helpers (private)
-    ############################################################
-
     @staticmethod
-    def _save_json(path: Path, data: Dict) -> None:  # noqa: D401 (simple helper)
-        """Write *data* as JSON to *path* (atomically, best effort)."""
-
+    def _save_json(path: Path, data: Dict) -> None:
         tmp = path.with_suffix(".json.tmp")
         with tmp.open("w", encoding="utf-8") as fh:
             json.dump(data, fh, ensure_ascii=False, indent=2)

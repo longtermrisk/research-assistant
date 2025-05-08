@@ -1,0 +1,117 @@
+:root {
+  /* Dark Theme Inspired by VS Code */
+  --background-primary: #1e1e1e; /* Editor background */
+  --background-secondary: #252526; /* Activity bar, status bar */
+  --background-tertiary: #333333; /* Side bar, panel headers */
+  --background-hover: #2a2d2e; /* Hover on list items */
+  --background-selected: #094771; /* Selected list items */
+
+  --foreground-primary: #cccccc; /* General text */
+  --foreground-secondary: #858585; /* Dimmed text, comments */
+  --foreground-accent: #007acc; /* Links, active elements */
+
+  --border-primary: #3c3c3c;
+  --border-secondary: #555555;
+
+  --button-primary-background: #0e639c;
+  --button-primary-foreground: #ffffff;
+  --button-secondary-background: #3a3d41;
+  --button-secondary-foreground: #cccccc;
+
+  --input-background: #3c3c3c;
+  --input-foreground: #cccccc;
+  --input-border: #3c3c3c;
+  --input-placeholder: #757575;
+
+  --scrollbar-thumb-background: #4f4f4f;
+  --scrollbar-track-background: var(--background-secondary);
+
+  --font-family-main: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  --font-family-monospace: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+
+  --error-color: #f44747;
+}
+
+body {
+  background-color: var(--background-primary);
+  color: var(--foreground-primary);
+  font-family: var(--font-family-main);
+}
+
+#root {
+  background-color: var(--background-primary);
+  color: var(--foreground-primary);
+}
+
+/* Basic element styling */
+a {
+  color: var(--foreground-accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+
+.button-primary {
+  background-color: var(--button-primary-background);
+  color: var(--button-primary-foreground);
+}
+.button-primary:hover {
+  opacity: 0.9;
+}
+
+.button-secondary {
+  background-color: var(--button-secondary-background);
+  color: var(--button-secondary-foreground);
+  border: 1px solid var(--border-secondary);
+}
+.button-secondary:hover {
+  background-color: var(--background-hover);
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+textarea {
+  background-color: var(--input-background);
+  color: var(--input-foreground);
+  border: 1px solid var(--input-border);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-family: inherit;
+}
+input[type="text"]::placeholder,
+input[type="password"]::placeholder,
+input[type="email"]::placeholder,
+textarea::placeholder {
+  color: var(--input-placeholder);
+}
+
+/* Scrollbar styling for WebKit browsers */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track-background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-background);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #686868;
+}
+
+.error-text {
+  color: var(--error-color);
+  font-size: 0.9em;
+}
