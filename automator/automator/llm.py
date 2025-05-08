@@ -186,9 +186,11 @@ if 'OPENROUTER_API_KEY' in os.environ:
 #     factor=1.5,
 # )
 async def get_response(model, messages, **kwargs):
+    all_models = []
     for provider in providers:
         if model in provider.models:
+            all_models.append(model)
             return await provider.get_response(model=model, messages=messages, **kwargs)
-    raise ValueError(f"Model '{model}' not supported by any provider. Supported models: {provider.models}")
+    raise ValueError(f"Model '{model}' not supported by any provider. Supported models: {all_models}")
         
     

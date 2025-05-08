@@ -1,1 +1,8 @@
-The threads-sidebar currently shows uuids, which is not so pretty. Instead, we should show the first couple of words from the first user message. Can you implement that? It may require changes to backend and frontend, but should be simple.
+# Edit chat history
+
+It would be great it the user can easily edit the chat history:
+- on hover over a content block, render an edit and a delete button
+- when a tool use block is deleted, the correponding tool result is also deleted
+- update the thread when the user hits a "save" button
+
+Can you implement that?
