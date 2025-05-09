@@ -72,22 +72,27 @@ class Agent:
                   temperature: float = 0.7, max_tokens: int = None,
                   thread_id: Optional[str] = None,
                   **prompt_template):
-        max_tokens = max_tokens or 8000 if not 'haiku' in self.model else 4000
+        if max_tokens is None:
+            if 'haiku' in self.model:
+                max_tokens = 4000
+            elif 'gemini' in self.model:
+                max_tokens = 64000
+            elif 'claude' in self.model:
+                max_tokens = 8000
+            elif model.startswith('o'):
+                max_tokens = 64000
 
-        # Generate first user message
-        ## Apply the prompt template
         _vars = dict(**self.prompt_template_vars, **prompt_template)
-        # Query can be None if we are just re-running a thread without a new user message
         messages_to_apply = {"query": query} if query is not None else {}
         messages = self.prompt_template.apply(dict(messages_to_apply, **_vars))
-        init, template_content = messages[:-1], messages[-1].content
-        ## Remove content blocks that contain $query
-        template_content = [c for c in template_content if not (isinstance(c, TextBlock) and c.text.strip() == "$query")]
-        user_message = ChatMessage(role=MessageRole.user, content=(initial_user_content or []) + template_content)
+
+        if initial_user_content:
+            user_message = ChatMessage(role=MessageRole.user, content=initial_user_content)
+            messages = messages[:-1] + [user_message]
         
         thread = Thread(
             model=self.model, 
-            messages=init + [user_message], 
+            messages=messages, 
             tools=self.tools, 
             env=self.env, 
             subagents=self.subagents, 

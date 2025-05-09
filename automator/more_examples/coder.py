@@ -86,7 +86,8 @@ async def main() -> None:
     #     }
     # )
     agent = Agent(
-        model='o3',
+        # model='o3',
+        model='google/gemini-2.5-pro-preview',
         prompt_template_yaml="prompts/swe.yaml",
         tools=["terminal.*"],
         workspace=workspace,

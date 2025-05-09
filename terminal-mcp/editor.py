@@ -4,7 +4,8 @@ import re
 import io # Use io instead of StringIO for BytesIO
 import base64 # Needed for decoding image data
 import hashlib # For creating safe filenames
-from typing import Union, List
+from typing import Union, List, Dict, Any
+import json
 
 import pandas as pd
 import nbformat
@@ -188,7 +189,7 @@ async def get_file(path: str, ctx: Context = None) -> Union[str, Image, List[Uni
 @mcp.tool()
 async def write_file(
     path: str,
-    content: str,
+    content: str | Dict[str, Any],
     ignore_warnings: bool = False,
     lint: bool = False,
     ctx: Context = None
@@ -196,7 +197,10 @@ async def write_file(
     """
     Writes/overwrites a file. Provide the full desired content.
     Use path relative to workspace, e.g., 'my_folder/my_file.txt'.
+    If content is a dict, it will be converted to a JSON string.
     """
+    if isinstance(content, dict):
+        content = json.dumps(content, indent=4)
     workspace = os.path.abspath(".")
     # Prevent writing to the special image directory or other sensitive paths
     normalized_rel_path = os.path.normpath(path)
