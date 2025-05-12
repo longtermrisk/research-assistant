@@ -16,6 +16,9 @@ from automator.dtypes import (
     ImageBlock
 )
 
+from dotenv import load_dotenv
+load_dotenv()
+
 
 class Provider:
     def __init__(self, get_response: Callable, models: List[str]):

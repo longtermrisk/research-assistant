@@ -23,8 +23,6 @@ from automator.dtypes import (
 from automator.workspace import Workspace
 from automator.gitignore_parser import load_gitignore_patterns, is_path_ignored
 
-from dotenv import load_dotenv
-load_dotenv()
 
 app = FastAPI()
 app.add_middleware(
