@@ -122,6 +122,15 @@ def start_all():
     start_backend()
     start_frontend()
 
+
+def setup_demo_workspace():
+    subprocess.run(['cp', '-r', os.path.join(os.path.dirname(__file__), 'demo'), os.path.expanduser('~/.automator/workspaces/demo')])
+    with open (os.path.expanduser('~/.automator/workspaces/demo/env.json'), 'w') as f:
+        json.dump({
+            "CWD": os.path.expanduser('~/.automator/workspaces/demo/workspace'),
+        }, f, indent=4)
+
+
 def install_repo():
     """
     Installs all components of the repo
@@ -134,8 +143,10 @@ def install_repo():
     setup_component('talk-to-model')
     setup_component('automator')
     setup_frontend()
+    setup_demo_workspace()
     if input("Do you want to start all components? (y/n): ").lower() == 'y':
         start_all()
+    print("For more examples, checkout examples/ and more_examples/")
 
 
 if __name__ == "__main__":

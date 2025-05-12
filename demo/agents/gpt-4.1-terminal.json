@@ -1,0 +1,13 @@
+{
+  "model": "gpt-4.1",
+  "prompt_template": "prompts/chatgpt.yaml",
+  "tools": [
+    "terminal.*"
+  ],
+  "env": {
+    "CWD": "/Users/nielswarncke/.automator/workspaces/demo/workspace"
+  },
+  "subagents": [],
+  "as_tool": null,
+  "prompt_template_vars": {}
+}
