@@ -1,0 +1,92 @@
+.container {
+  position: relative;
+  width: 100%;
+}
+
+.textarea {
+  width: 100%;
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid var(--input-border);
+  background-color: var(--input-background);
+  color: var(--input-foreground);
+  font-family: var(--font-family-main);
+  font-size: 1em;
+  resize: none;
+  min-height: 40px; /* Adjust as needed */
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.popup {
+  position: absolute;
+  background-color: var(--background-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  min-width: 250px; /* Ensure it's not too narrow */
+}
+
+.popup ul {
+  list-style: none;
+  padding: 5px 0;
+  margin: 0;
+}
+
+.popup li {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--foreground-primary);
+}
+
+.popup li:hover,
+.popup li.active {
+  background-color: var(--background-hover);
+}
+
+.popup li.selected {
+  background-color: var(--background-selected);
+  font-weight: bold;
+}
+
+.folderName, .fileName {
+  flex-grow: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* ditambah user */
+  display: inline-flex; /* Align name and path nicely */
+  align-items: baseline;
+}
+
+/* Added style for the path part */
+.itemPath {
+  color: var(--foreground-secondary);
+  font-size: 0.9em;
+  margin-left: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folderToggle {
+  margin-right: 5px;
+  display: inline-block;
+  width: 10px; /* Fixed width for alignment */
+}
+
+.checkbox {
+  margin-right: 8px;
+}
+
+.noResults {
+  padding: 8px 12px;
+  color: var(--foreground-secondary);
+  text-align: center;
+}

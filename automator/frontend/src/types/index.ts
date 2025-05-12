@@ -114,4 +114,15 @@ export interface ThreadCreatePayload {
 // For posting a message (corresponds to MessagePostRequest on backend)
 export interface MessagePostPayload {
   content: ContentBlock[];
+  // If you were to add mentioned_files to the payload:
+  // mentioned_files?: string[]; 
+}
+
+// Definition for file/folder items in the workspace
+export interface FileSystemItem {
+  id: string; // Unique ID, typically the path relative to workspace root
+  name: string; // Display name of the file or folder
+  path: string; // Full path relative to workspace root
+  type: 'file' | 'folder';
+  children?: FileSystemItem[]; // For folders, list of their children
 }

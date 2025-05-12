@@ -5,10 +5,12 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import * as api from '../../services/api';
 import {
   ApiChatMessage, ThreadDetail, Agent,
-  ContentBlock, MessageRole, TextBlock, ToolUseBlock, ToolResultBlock, ImageBlock, Base64ImageSource
+  ContentBlock, MessageRole, TextBlock, ToolUseBlock, ToolResultBlock, ImageBlock, Base64ImageSource, FileSystemItem
 } from '../../types';
 import './MainView.css';
 import { getMessagesSSE } from '../../services/api';
+import FileMentionInput from '../../components/FileMentionInput/FileMentionInput'; // Added
+import { mockFiles } from '../../components/FileMentionInput/mockData'; // Added
 
 // Interface for an image that has been processed and is ready for display/sending
 interface AttachedImage {
@@ -139,11 +141,12 @@ const MainView: React.FC = () => {
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
   const [selectedAgentForNewThread, setSelectedAgentForNewThread] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [mentionedFilePaths, setMentionedFilePaths] = useState<string[]>([]); // Added
 
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null); // This ref will be passed to FileMentionInput
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
 
@@ -248,12 +251,14 @@ const MainView: React.FC = () => {
 
   useEffect(scrollToBottom, [messages, attachedImages]);
 
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [newMessage]);
+  // Auto-resize for FileMentionInput is handled internally by that component now.
+  // Keeping the original textarea auto-resize logic commented out in case of future direct textarea use.
+  // useEffect(() => {
+  //   if (textareaRef.current) {
+  //     textareaRef.current.style.height = 'auto';
+  //     textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+  //   }
+  // }, [newMessage]);
 
   const handleScroll = () => {
     if (chatContainerRef.current) {
@@ -275,8 +280,11 @@ const MainView: React.FC = () => {
     setError(null);
     setIsLoading(true);
 
+    console.log("Mentioned file paths to be sent (logged):", mentionedFilePaths); // Log mentioned files
+
     const contentBlocks: ContentBlock[] = [];
     if (newMessage.trim()) {
+      // The newMessage already contains the @path/to/file mentions as plain text
       contentBlocks.push({ type: "text", text: newMessage.trim() });
     }
     attachedImages.forEach(img => {
@@ -289,12 +297,19 @@ const MainView: React.FC = () => {
         } as Base64ImageSource,
       });
     });
+    
+    // Example of how you might include mentionedFilePaths in the payload if API supported it:
+    // const payload: MessagePostPayload = { 
+    //   content: contentBlocks,
+    //   mentioned_files: mentionedFilePaths // This would require API change
+    // };
 
     if (currentThread && threadId) {
       try {
         await api.postMessage(workspaceName, threadId, { content: contentBlocks });
         setNewMessage('');
         setAttachedImages([]);
+        setMentionedFilePaths([]); // Clear mentioned files after sending
       } catch (err: any) {
         setError(err.message || 'Failed to send message');
       }
@@ -302,10 +317,11 @@ const MainView: React.FC = () => {
       try {
         const newThreadSummary = await api.createThread(workspaceName, {
           agent_id: selectedAgentForNewThread,
-          initial_content: contentBlocks, // Pass rich content here
+          initial_content: contentBlocks, 
         });
         setNewMessage('');
         setAttachedImages([]);
+        setMentionedFilePaths([]); // Clear mentioned files after sending
         setSelectedAgentForNewThread(null);
         navigate(`/workspace/${workspaceName}/thread/${newThreadSummary.id}`);
       } catch (err: any) {
@@ -384,7 +400,7 @@ const MainView: React.FC = () => {
         }
       }
       if (files.length > 0) {
-        event.preventDefault();
+        event.preventDefault(); // Prevent pasting file path as text
         const dataTransfer = new DataTransfer();
         files.forEach(file => dataTransfer.items.add(file));
         await handleImageAttach(dataTransfer.files);
@@ -522,20 +538,16 @@ const MainView: React.FC = () => {
               </div>
             )}
             <div className="message-input-area">
-              <textarea
-                ref={textareaRef}
+              {/* Replaced textarea with FileMentionInput */}
+              <FileMentionInput
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onPaste={handlePaste} 
-                placeholder={currentThread ? `Message ${currentThread.id}` : `Message to ${selectedAgentForNewThread || 'new thread'}...`}
-                rows={1}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
+                onChange={setNewMessage}
+                onMentionedFilesChange={setMentionedFilePaths}
+                availableFiles={mockFiles} 
+                textareaRef={textareaRef}
+                onSend={handleSendMessage} 
               />
+              {/* The original textarea and paste handler are removed as FileMentionInput handles text input */}
               <input 
                   type="file"
                   multiple 

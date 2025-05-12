@@ -51,7 +51,7 @@
   font-style: italic;
   color: var(--foreground-secondary);
   max-width: 100%;
-  text-align: center;
+  /* text-align: center; */
   font-size: 0.9em;
 }
 
