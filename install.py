@@ -85,6 +85,21 @@ def setup_frontend():
     subprocess.run(['npm', 'install'], check=True)
 
 
+def get_env_from_mcp_json():
+    """
+    Get the env from mcp.json
+    """
+    with open(os.path.expanduser('~/mcp.json'), 'r') as f:
+        mcp_json = json.load(f)
+    
+    env = {}
+    for name, config in mcp_json['mcpServers'].items():
+        if 'env' in config:
+            env.update(config['env'])
+    
+    return env
+
+
 def start_backend():
     """
     Start backend:
@@ -97,7 +112,8 @@ def start_backend():
     subprocess.Popen(
         [python_path, '-m', 'uvicorn', 'automator.api.main:app', '--port', '8000'],
         stdout=open('../backend.logs', 'a'),
-        stderr=subprocess.STDOUT
+        stderr=subprocess.STDOUT,
+        env=get_env_from_mcp_json()
     )
     print("Backend started. Logs are being written to backend.logs.")
 
@@ -138,6 +154,7 @@ def install_repo():
     ensure_uv()
     if not os.path.exists(os.path.expanduser('~/mcp.json')):
         setup_mcp_dot_json()
+    os.makedirs(os.path.expanduser('~/.automator/workspaces'), exist_ok=True)
     setup_component('terminal-mcp')
     setup_component('web-mcp')
     setup_component('talk-to-model')

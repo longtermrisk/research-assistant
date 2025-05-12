@@ -10,9 +10,7 @@ from automator.dtypes import ChatMessage, ToolUseBlock
 
 
 async def main() -> None:
-    workspace = Workspace('research-assistant', env={
-        'CWD': '../research-assistant'
-    })
+    workspace = Workspace('demo')
     agent = Agent(
         # model="claude-3-7-sonnet-20250219",
         model='gpt-4.1',
