@@ -188,3 +188,5 @@ todo.md
 *.private
 .openai_batch_cache
 planb/
+
+*.logs

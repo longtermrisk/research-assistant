@@ -1,16 +1,22 @@
 {
     "mcpServers": {
         "terminal": {
-            "command": "/Users/nielswarncke/.local/bin/uv",
+            "command": "/path/to/uv",
             "args": [
                 "--directory",
                 "/path/to/repo/terminal-mcp",
                 "run",
                 "terminal.py"
-            ]
+            ],
+            "env": {
+                "OPENAI_API_KEY": "...",
+                "HF_TOKEN": "...",
+                "OPENWEIGHTS_API_KEY": "...",
+                "ANTHROPIC_API_KEY": "..."
+            }
         },
         "web": {
-            "command": "/Users/nielswarncke/.local/bin/uv",
+            "command": "/path/to/uv",
             "args": [
                 "--directory",
                 "/path/to/repo/web-mcp",
@@ -22,7 +28,7 @@
             }
         },
         "talk2model": {
-            "command": "/Users/nielswarncke/.local/bin/uv",
+            "command": "/path/to/uv",
             "args": [
                 "--directory",
                 "/path/to/repo/talk-to-model",
@@ -31,7 +37,8 @@
             ],
             "env": {
                 "OPENAI_API_KEY": "openai api key",
-                "OPENWEIGHTS_API_KEY": "openweights api key"
+                "OPENWEIGHTS_API_KEY": "openweights api key",
+                "HF_TOKEN": "huggingface token"
             }
         }
     }
