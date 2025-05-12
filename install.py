@@ -92,12 +92,17 @@ def get_env_from_mcp_json():
     with open(os.path.expanduser('~/mcp.json'), 'r') as f:
         mcp_json = json.load(f)
     
-    env = os.environ.copy()
+    env = {}
     for name, config in mcp_json['mcpServers'].items():
         if 'env' in config:
             env.update(config['env'])
 
-    return env
+    # Now write to .env
+    env_path = os.path.join(os.path.dirname(__file__), '.env')
+    with open(env_path, 'w') as f:
+        for key, value in env.items():
+            f.write(f"{key}={value}\n")
+    print(f"Environment variables have been written to {env_path}.")
 
 
 def start_backend():
@@ -112,8 +117,7 @@ def start_backend():
     subprocess.Popen(
         [python_path, '-m', 'uvicorn', 'automator.api.main:app', '--port', '8000'],
         stdout=open('../backend.logs', 'a'),
-        stderr=subprocess.STDOUT,
-        env=get_env_from_mcp_json()
+        stderr=subprocess.STDOUT
     )
     print("Backend started. Logs are being written to backend.logs.")
 
