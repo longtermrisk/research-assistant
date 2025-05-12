@@ -3,7 +3,8 @@ import {
   Workspace, WorkspaceCreatePayload,
   Agent, AgentCreatePayload,
   ThreadSummary, ThreadDetail, ThreadCreatePayload, MessagePostPayload,
-  ApiChatMessage
+  ApiChatMessage,
+  FileSystemItem // Added
 } from '../types';
 
 const API_BASE_URL = 'http://localhost:8000'; // Assuming backend runs on port 8000
@@ -36,6 +37,13 @@ export async function getWorkspaceDetails(workspaceName: string): Promise<Worksp
   return handleResponse<Workspace>(response);
 }
 
+// New function to list files in a workspace
+export async function listWorkspaceFiles(workspaceName: string): Promise<FileSystemItem[]> {
+  const response = await fetch(`${API_BASE_URL}/workspaces/${workspaceName}/files`);
+  return handleResponse<FileSystemItem[]>(response);
+}
+
+
 // Agent Endpoints
 export async function createAgent(workspaceName: string, payload: AgentCreatePayload): Promise<Agent> {
   const response = await fetch(`${API_BASE_URL}/workspaces/${workspaceName}/agents`, {
@@ -61,7 +69,7 @@ export async function createThread(workspaceName: string, payload: ThreadCreateP
   const response = await fetch(`${API_BASE_URL}/workspaces/${workspaceName}/threads`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payload), // Payload now includes mentioned_file_paths
   });
   return handleResponse<ThreadSummary>(response);
 }
@@ -80,7 +88,7 @@ export async function postMessage(workspaceName: string, threadId: string, paylo
   const response = await fetch(`${API_BASE_URL}/workspaces/${workspaceName}/threads/${threadId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payload), // Payload now includes mentioned_file_paths
   });
   return handleResponse<ApiChatMessage>(response);
 }

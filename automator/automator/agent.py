@@ -79,7 +79,7 @@ class Agent:
                 max_tokens = 64000
             elif 'claude' in self.model:
                 max_tokens = 8000
-            elif model.startswith('o'):
+            elif self.model.startswith('o'):
                 max_tokens = 64000
 
         _vars = dict(**self.prompt_template_vars, **prompt_template)

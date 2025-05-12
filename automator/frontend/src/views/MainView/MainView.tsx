@@ -5,30 +5,31 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import * as api from '../../services/api';
 import {
   ApiChatMessage, ThreadDetail, Agent,
-  ContentBlock, MessageRole, TextBlock, ToolUseBlock, ToolResultBlock, ImageBlock, Base64ImageSource
+  ContentBlock, MessageRole, TextBlock, ToolUseBlock, ToolResultBlock, ImageBlock, Base64ImageSource, FileSystemItem
 } from '../../types';
 import './MainView.css';
 import { getMessagesSSE } from '../../services/api';
+import FileMentionInput from '../../components/FileMentionInput/FileMentionInput';
+import ReactMarkdown from 'react-markdown';
 
-// Interface for an image that has been processed and is ready for display/sending
 interface AttachedImage {
-  id: string; // For unique key in React lists
+  id: string;
   file: File;
   base64: string;
   media_type: string;
 }
 
-// Function to recursively extract text from content blocks for copying
 const extractTextForCopy = (block: ContentBlock, messagesForContext: ApiChatMessage[], currentWorkspaceName?: string): string => {
   switch (block.type) {
     case 'text':
+      // If block is hidden, don't include its text for copying by user
+      if (block.meta && block.meta.hidden) return ""; 
       return (block as TextBlock).text;
     case 'image':
-      return "[Image Content]"; // Placeholder for images
+      return "[Image Content]";
     case 'tool_use':
       const tuBlock = block as ToolUseBlock;
-      let toolUseText = `Tool Call: ${tuBlock.name} (ID: ${tuBlock.id})\nInput:\n${JSON.stringify(tuBlock.input, null, 2)}`;
-      return toolUseText;
+      return `Tool Call: ${tuBlock.name} (ID: ${tuBlock.id})\nInput:\n${JSON.stringify(tuBlock.input, null, 2)}`;
     case 'tool_result':
       const trBlock = block as ToolResultBlock;
       let resultText = `Result for Tool Call ID: ${trBlock.tool_use_id}\n`;
@@ -46,14 +47,19 @@ const extractTextForCopy = (block: ContentBlock, messagesForContext: ApiChatMess
   }
 };
 
-
 const RenderContentBlock: React.FC<{
   block: ContentBlock;
   index: number;
   allBlocks: ContentBlock[];
   messages: ApiChatMessage[];
   workspaceName?: string;
-}> = ({ block, index, allBlocks, messages, workspaceName }) => {
+  insideToolResultBlock?: boolean; // <-- Add this prop
+}> = ({ block, index, allBlocks, messages, workspaceName, insideToolResultBlock = false }) => {
+  // Check for hidden meta flag
+  if (block.meta && block.meta.hidden === true) {
+    return null; // Don't render hidden blocks
+  }
+
   const findCorrespondingToolUse = (toolResultId: string): ToolUseBlock | undefined => {
     for (const msg of messages) {
       for (const b of msg.content) {
@@ -67,7 +73,17 @@ const RenderContentBlock: React.FC<{
 
   switch (block.type) {
     case 'text':
-      return <div key={index} className="text-block">{(block as TextBlock).text}</div>;
+      if (insideToolResultBlock) {
+        // Plain text (not markdown)
+        return <div key={index} className="text-block">{(block as TextBlock).text}</div>;
+      } else {
+        // Render as markdown
+        return (
+          <div key={index} className="text-block">
+            <ReactMarkdown>{(block as TextBlock).text}</ReactMarkdown>
+          </div>
+        );
+      }
     case 'image':
       const imageBlock = block as ImageBlock;
       return <div key={index} className="image-block"><img src={`data:${imageBlock.source.media_type};base64,${imageBlock.source.data}`} alt="Uploaded content" /></div>;
@@ -115,6 +131,7 @@ const RenderContentBlock: React.FC<{
               allBlocks={toolResultBlock.content} 
               messages={messages} 
               workspaceName={workspaceName}
+              insideToolResultBlock={true} // <-- Pass true here
             />
           ))}
         </div>
@@ -139,6 +156,10 @@ const MainView: React.FC = () => {
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
   const [selectedAgentForNewThread, setSelectedAgentForNewThread] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  
+  const [mentionedFilePaths, setMentionedFilePaths] = useState<string[]>([]);
+  const [workspaceFiles, setWorkspaceFiles] = useState<FileSystemItem[]>([]);
+  const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(false);
 
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -146,16 +167,38 @@ const MainView: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
-
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  useEffect(() => {
+    if (currentWorkspace && currentWorkspace.name) {
+      setIsLoadingFiles(true);
+      api.listWorkspaceFiles(currentWorkspace.name)
+        .then(files => {
+          setWorkspaceFiles(files);
+          setIsLoadingFiles(false);
+        })
+        .catch(err => {
+          console.error('Failed to load workspace files:', err);
+          setError('Failed to load workspace files: ' + err.message);
+          setIsLoadingFiles(false);
+        });
+      
+      api.listAgents(currentWorkspace.name)
+        .then(setAvailableAgents)
+        .catch(err => {
+          console.error('Failed to load agents:', err);
+          // Keep existing error or set new one, prioritize file loading error if both happen
+          setError(prev => prev || ('Failed to load agents: ' + err.message));
+        });
+    }
+  }, [currentWorkspace]);
 
-  // Helper to convert file to base64
+
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
-      reader.onload = () => resolve((reader.result as string).split(',')[1]); // Get only base64 part
+      reader.onload = () => resolve((reader.result as string).split(',')[1]);
       reader.onerror = error => reject(error);
     });
   };
@@ -165,20 +208,13 @@ const MainView: React.FC = () => {
     const imageFiles = Array.from(files).filter(file => 
       ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)
     );
-
     if (imageFiles.length === 0) return;
-
-    setIsLoading(true); // Indicate processing
+    setIsLoading(true);
     try {
       const newAttachedImages: AttachedImage[] = await Promise.all(
         imageFiles.map(async (file) => {
           const base64 = await fileToBase64(file);
-          return {
-            id: `${file.name}-${Date.now()}`,
-            file,
-            base64,
-            media_type: file.type,
-          };
+          return { id: `${file.name}-${Date.now()}`, file, base64, media_type: file.type };
         })
       );
       setAttachedImages(prev => [...prev, ...newAttachedImages]);
@@ -193,21 +229,8 @@ const MainView: React.FC = () => {
     setAttachedImages(prev => prev.filter(img => img.id !== idToRemove));
   };
 
-
-  useEffect(() => {
-    if (currentWorkspace && currentWorkspace.name) {
-      api.listAgents(currentWorkspace.name)
-        .then(setAvailableAgents)
-        .catch(err => {
-          console.error('Failed to load agents:', err);
-          setError('Failed to load agents: ' + err.message);
-        });
-    }
-  }, [currentWorkspace]);
-
   useEffect(() => {
     if (!currentWorkspace || !workspaceName) return;
-
     if (threadId) {
       setIsLoading(true);
       setError(null);
@@ -230,7 +253,7 @@ const MainView: React.FC = () => {
       };
       sse.onerror = (err) => {
         console.error('SSE Error:', err);
-        setError('Connection error with server updates.');
+        setError(prev => prev || 'Connection error with server updates.');
         sse.close();
       };
       return () => sse.close();
@@ -247,13 +270,6 @@ const MainView: React.FC = () => {
   };
 
   useEffect(scrollToBottom, [messages, attachedImages]);
-
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [newMessage]);
 
   const handleScroll = () => {
     if (chatContainerRef.current) {
@@ -282,19 +298,21 @@ const MainView: React.FC = () => {
     attachedImages.forEach(img => {
       contentBlocks.push({
         type: "image",
-        source: {
-          type: "base64",
-          media_type: img.media_type,
-          data: img.base64,
-        } as Base64ImageSource,
+        source: { type: "base64", media_type: img.media_type, data: img.base64 } as Base64ImageSource,
       });
     });
+    
+    const payload = { 
+      content: contentBlocks,
+      mentioned_file_paths: mentionedFilePaths.length > 0 ? mentionedFilePaths : undefined
+    };
 
     if (currentThread && threadId) {
       try {
-        await api.postMessage(workspaceName, threadId, { content: contentBlocks });
+        await api.postMessage(workspaceName, threadId, payload);
         setNewMessage('');
         setAttachedImages([]);
+        setMentionedFilePaths([]);
       } catch (err: any) {
         setError(err.message || 'Failed to send message');
       }
@@ -302,10 +320,12 @@ const MainView: React.FC = () => {
       try {
         const newThreadSummary = await api.createThread(workspaceName, {
           agent_id: selectedAgentForNewThread,
-          initial_content: contentBlocks, // Pass rich content here
+          initial_content: contentBlocks, 
+          mentioned_file_paths: mentionedFilePaths.length > 0 ? mentionedFilePaths : undefined
         });
         setNewMessage('');
         setAttachedImages([]);
+        setMentionedFilePaths([]);
         setSelectedAgentForNewThread(null);
         navigate(`/workspace/${workspaceName}/thread/${newThreadSummary.id}`);
       } catch (err: any) {
@@ -332,15 +352,12 @@ const MainView: React.FC = () => {
             if (resultBlock) {
               contentToCopy += extractTextForCopy(resultBlock, messages, workspaceName) + "\n";
             }
-          } else if (msg.content.some(b => b.type === 'tool_result' && (b as ToolResultBlock).tool_use_id === block.id)){
-            // const resultBlock = msg.content.find(b => b.type === 'tool_result' && (b as ToolResultBlock).tool_use_id === block.id) as ToolResultBlock | undefined;
-            // if (resultBlock) { /* Already handled by iteration */ }
           }
         }
       });
     } else {
       contentToCopy = msg.content
-        .filter(block => block.type === 'text')
+        .filter(block => !(block.meta && block.meta.hidden)) // Exclude hidden blocks
         .map(block => (block as TextBlock).text)
         .join('\n');
     }
@@ -378,20 +395,17 @@ const MainView: React.FC = () => {
       for (let i = 0; i < items.length; i++) {
         if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
           const file = items[i].getAsFile();
-          if (file) {
-            files.push(file);
-          }
+          if (file) files.push(file);
         }
       }
       if (files.length > 0) {
-        event.preventDefault();
+        event.preventDefault(); 
         const dataTransfer = new DataTransfer();
         files.forEach(file => dataTransfer.items.add(file));
         await handleImageAttach(dataTransfer.files);
       }
     }
   }, [handleImageAttach]);
-
 
   if (!currentWorkspace) {
     return <AppLayout><div>Loading workspace data or workspace not selected...</div></AppLayout>;
@@ -425,6 +439,10 @@ const MainView: React.FC = () => {
     if (msg.role === MessageRole.User && msg.content.length > 0 && msg.content.every(block => block.type === 'tool_result')) {
       return false; 
     }
+     // Filter out top-level messages that are entirely composed of hidden blocks
+    if (msg.content.length > 0 && msg.content.every(block => block.meta && block.meta.hidden === true)) {
+        return false;
+    }
     return true;
   });
 
@@ -432,11 +450,17 @@ const MainView: React.FC = () => {
     <AppLayout>
       <div className="chat-view-container">
         {isLoading && !processedMessages.length && <div className="loading-chat">Loading messages...</div>}
+        {/* Display file loading errors prominently if they occur */}
+        {isLoadingFiles && <div className="loading-chat">Loading workspace files...</div>}
         {error && <div className="error-message">Error: {error}</div>}
         
         <div className="messages-area" ref={chatContainerRef} onScroll={handleScroll}>
           {processedMessages.map((msg, msgIndex) => {
-            const originalMsgIndex = messages.findIndex(originalMsg => originalMsg === msg);
+            const originalMsgIndex = messages.findIndex(originalMsg => originalMsg === msg); // Should be fine
+            // Filter out content blocks that are hidden before rendering them within a message
+            const visibleContent = msg.content.filter(block => !(block.meta && block.meta.hidden === true));
+            if (visibleContent.length === 0 && msg.role !== MessageRole.System) return null; // Don't render user/assistant message if all its content is hidden
+
             return (
             <div key={originalMsgIndex} className={`message-bubble ${msg.role}`}>
               <div className="message-header">
@@ -446,35 +470,39 @@ const MainView: React.FC = () => {
                 </button>
               </div>
               <div className="message-content">
-                {msg.content.map((block, index) => {
+                {/* Render only visible content */}
+                {visibleContent.map((block, index) => {
                   if (block.type === 'tool_use') {
                     const toolUse = block as ToolUseBlock;
                     let toolResult: ToolResultBlock | undefined = undefined;
                     const resultInSameMessage = msg.content.find(
                       b => b.type === 'tool_result' && (b as ToolResultBlock).tool_use_id === toolUse.id
                     ) as ToolResultBlock | undefined;
-                    if (resultInSameMessage) {
+                    if (resultInSameMessage && !(resultInSameMessage.meta && resultInSameMessage.meta.hidden)) {
                       toolResult = resultInSameMessage;
                     } else {
                       const nextOriginalMessage = messages[originalMsgIndex + 1];
                       if (nextOriginalMessage && nextOriginalMessage.role === MessageRole.User && 
                           nextOriginalMessage.content.every(c => c.type === 'tool_result')) {
                         toolResult = nextOriginalMessage.content.find(
-                          b => (b as ToolResultBlock).tool_use_id === toolUse.id
+                          b => (b as ToolResultBlock).tool_use_id === toolUse.id && !(b.meta && b.meta.hidden)
                         ) as ToolResultBlock | undefined;
                       }
                     }
                     return (
                       <div key={index} className="tool-cycle-block">
-                        <RenderContentBlock block={toolUse} index={index} allBlocks={msg.content} messages={messages} workspaceName={workspaceName}/>
+                        <RenderContentBlock block={toolUse} index={index} allBlocks={visibleContent} messages={messages} workspaceName={workspaceName}/>
                         {toolResult && <RenderContentBlock block={toolResult} index={-1} allBlocks={[]} messages={messages} workspaceName={workspaceName} />}
                       </div>
                     );
                   }
-                  if (block.type === 'tool_result') {
-                    let wasHandled = false;
-                    for(let i = 0; i < index; i++) {
-                        const prevBlock = msg.content[i] as ContentBlock;
+                  // Tool results that are part of a tool_use cycle are handled above.
+                  // If a tool_result appears standalone and isn't hidden, render it.
+                  // This part might need adjustment based on how tool_results are structured if not paired immediately.
+                  if (block.type === 'tool_result') { 
+                    let wasHandled = false; // Check if this tool_result was already rendered as part of a tool_use block
+                     for(let i = 0; i < index; i++) {
+                        const prevBlock = visibleContent[i] as ContentBlock; // Check against visible content
                         if(prevBlock.type === 'tool_use' && (prevBlock as ToolUseBlock).id === (block as ToolResultBlock).tool_use_id) {
                             wasHandled = true;
                             break;
@@ -482,14 +510,14 @@ const MainView: React.FC = () => {
                     }
                     if (!wasHandled && originalMsgIndex > 0) {
                         const prevOriginalMessage = messages[originalMsgIndex - 1];
-                        if (prevOriginalMessage.role === MessageRole.Assistant && 
-                            prevOriginalMessage.content.some(b => b.type === 'tool_use' && (b as ToolUseBlock).id === (block as ToolResultBlock).tool_use_id)) {
+                         if (prevOriginalMessage.role === MessageRole.Assistant && 
+                            prevOriginalMessage.content.some(b => b.type === 'tool_use' && (b as ToolUseBlock).id === (block as ToolResultBlock).tool_use_id && !(b.meta && b.meta.hidden))) {
                             wasHandled = true;
                         }
                     }
-                    if (wasHandled) return null; 
+                    if(wasHandled) return null;
                   }
-                  return <RenderContentBlock block={block} index={index} allBlocks={msg.content} messages={messages} workspaceName={workspaceName} />;
+                  return <RenderContentBlock block={block} index={index} allBlocks={visibleContent} messages={messages} workspaceName={workspaceName} />;
                 })}
               </div>
             </div>
@@ -522,19 +550,13 @@ const MainView: React.FC = () => {
               </div>
             )}
             <div className="message-input-area">
-              <textarea
-                ref={textareaRef}
+              <FileMentionInput
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onPaste={handlePaste} 
-                placeholder={currentThread ? `Message ${currentThread.id}` : `Message to ${selectedAgentForNewThread || 'new thread'}...`}
-                rows={1}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
+                onChange={setNewMessage}
+                onMentionedFilesChange={setMentionedFilePaths}
+                availableFiles={workspaceFiles} // Use fetched files
+                textareaRef={textareaRef}
+                onSend={handleSendMessage} 
               />
               <input 
                   type="file"
@@ -544,7 +566,7 @@ const MainView: React.FC = () => {
                   style={{ display: 'none' }} 
                   onChange={(e) => handleImageAttach(e.target.files)}
               />
-              <button onClick={handleSendMessage} disabled={isLoading || (!newMessage.trim() && attachedImages.length === 0) || (!threadId && !selectedAgentForNewThread)}>
+              <button onClick={handleSendMessage} disabled={isLoading || isLoadingFiles || (!newMessage.trim() && attachedImages.length === 0) || (!threadId && !selectedAgentForNewThread)}>
                 {isLoading ? 'Sending...' : 'Send'}
               </button>
             </div>

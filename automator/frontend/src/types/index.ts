@@ -107,11 +107,22 @@ export interface AgentCreatePayload {
 // For creating a thread (corresponds to ThreadCreateRequest on backend)
 export interface ThreadCreatePayload {
   agent_id: string;
-  initial_content: ContentBlock[]; // Updated from initial_query: string
+  initial_content: ContentBlock[];
   thread_id?: string | null;
+  mentioned_file_paths?: string[]; // Added
 }
 
 // For posting a message (corresponds to MessagePostRequest on backend)
 export interface MessagePostPayload {
   content: ContentBlock[];
+  mentioned_file_paths?: string[]; // Added
+}
+
+// Definition for file/folder items in the workspace
+export interface FileSystemItem {
+  id: string; 
+  name: string; 
+  path: string; 
+  type: 'file' | 'folder';
+  children?: FileSystemItem[]; 
 }
