@@ -113,7 +113,7 @@ def start_backend():
         [python_path, '-m', 'uvicorn', 'automator.api.main:app', '--port', '8000'],
         stdout=open('../backend.logs', 'a'),
         stderr=subprocess.STDOUT,
-        # env=get_env_from_mcp_json()
+        env=get_env_from_mcp_json()
     )
     print("Backend started. Logs are being written to backend.logs.")
 
