@@ -11,7 +11,7 @@ from automator.dtypes import ChatMessage, ToolUseBlock, SubagentToolDefinition
 model = "claude-3-7-sonnet-20250219"
 
 async def main() -> None:
-    workspace = Workspace('planb')
+    workspace = Workspace('demo')
     explorer = Agent(
         model=model,
         prompt_template_yaml="prompts/dataset_explorer.yaml",
