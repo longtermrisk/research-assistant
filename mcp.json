@@ -6,7 +6,7 @@
                 "--directory",
                 "/path/to/repo/terminal-mcp",
                 "run",
-                "terminal.py"
+                "entrypoint.py"
             ],
             "env": {
                 "OPENAI_API_KEY": "...",

@@ -251,14 +251,12 @@ class Thread:
             self.messages.append(llm_response_message); yield llm_response_message
             if self.workspace:
                 self.workspace.add_thread(thread=self, id=self.id)
-                self.to_markdown()
             tool_results_message, done = await self.process_message(llm_response_message)
             if done:
                 break
             self.messages.append(tool_results_message); yield tool_results_message
             if self.workspace:
                 self.workspace.add_thread(thread=self, id=self.id)
-                self.to_markdown()
     
     async def process_message(self, msg_w_tool_uses: ChatMessage) -> Tuple[ChatMessage, bool]:
         tool_use_blocks = [b for b in msg_w_tool_uses.content if isinstance(b, ToolUseBlock)]
@@ -317,115 +315,3 @@ class Thread:
         return {"model": self.model, "messages": [m.model_dump() for m in self.messages], "tools": self._tools,
                 "temperature": self.temperature, "max_tokens": self.max_tokens, "env": self.env,
                 "subagents": self.subagents, "thread_ids": list(self._threads.keys())}
-    
-    def to_markdown(self) -> str:
-        """
-        Convert the internal chat representation into a markdown string,
-        write it to ./logs/md/{thread_id}.md, and handle subthreads by linking.
-        Returns the path to the generated markdown file.
-
-        Tool use/result merging is only done for tool results in the message
-        directly after the tool use message, and tool use ids are only unique
-        within that pair.
-        """
-        import os
-        import json # Already imported at module level
-        import base64
-        from uuid import uuid4 # Already imported at module level
-
-        log_dir = "./.logs"
-        md_dir = os.path.join(log_dir, "md")
-        os.makedirs(log_dir, exist_ok=True) # Ensure .logs exists for images
-        os.makedirs(md_dir, exist_ok=True) # Ensure .logs/md exists for markdown files
-
-        output_path = os.path.abspath(os.path.join(md_dir, f"{self.id}.md"))
-        # logger.info(f"Writing markdown to: {output_path}") # Temporarily comment out print
-        md_output = f"# Thread: {self.id}\n\n"
-
-        def render_block_md(block_item, tool_result_item=None) -> str:
-            """Renders a single content block to markdown."""
-            if isinstance(block_item, ToolUseBlock):
-                return render_tool_block_md(block_item, tool_result_item)
-            elif isinstance(block_item, ToolResultBlock):
-                return ""
-            elif isinstance(block_item, TextBlock):
-                return block_item.text + "\n"
-            elif isinstance(block_item, ImageBlock):
-                img_filename = f"{uuid4()}.png"
-                img_path_abs = os.path.join(log_dir, img_filename)
-                img_path_rel = os.path.join("..", img_filename)
-                try:
-                    img_data = base64.b64decode(block_item.source.data)
-                    with open(img_path_abs, 'wb') as f_img:
-                        f_img.write(img_data)
-                    return f"\n![image]({img_path_rel})\n"
-                except Exception as e_img:
-                    return f"\n*Error saving/rendering image: {e_img}*\n"
-            else:
-                return f"**Unknown block type:** {getattr(block_item, 'type', str(type(block_item)))}\n"
-
-        def render_tool_block_md(tool_use: ToolUseBlock, tool_result: Optional[ToolResultBlock] = None) -> str:
-            """Renders a tool call and its result, handling subthreads."""
-            out_md = f"**Tool Call:** `{tool_use.name}` (ID: `{tool_use.id}`)\n"
-            out_md += f"```json\n{json.dumps(tool_use.input, indent=2)}\n```\n"
-
-            if tool_result:
-                if getattr(tool_result, "meta", None) and 'thread_id' in tool_result.meta:
-                    subthread_id = tool_result.meta['thread_id']
-                    start_msg_idx = tool_result.meta.get('message_start', 0)
-                    subthread_link = f"./{subthread_id}.md#message-{start_msg_idx}"
-                    if self.workspace:
-                        subthread = self.workspace.get_thread(subthread_id)
-                        if subthread:
-                            subthread.to_markdown()
-                            out_md += f"**Sub-Thread Output:** See [Thread {subthread_id} (Message {start_msg_idx})]({subthread_link})\n"
-                        else:
-                            out_md += f"**Sub-Thread Output:** Error - Subthread {subthread_id} not found.\n"
-                    else:
-                        out_md += f"**Sub-Thread Output:** Error - Workspace not available for subthread {subthread_id}.\n"
-                else:
-                    out_md += f"**Tool Result:** (for call ID: `{tool_result.tool_use_id}`)\n"
-                    tool_output_md_val = ""
-                    content_list_val = tool_result.content if isinstance(tool_result.content, list) else [tool_result.content]
-                    for content_block_val in content_list_val:
-                        tool_output_md_val += render_block_md(content_block_val)
-                    if tool_output_md_val.strip():
-                        indented_output = "> " + tool_output_md_val.replace("\n", "\n> ").strip()
-                        if indented_output.endswith('\n> '): indented_output = indented_output[:-3]
-                        elif indented_output == '> ': indented_output = "> *No displayable output*"
-                        out_md += indented_output + "\n"
-                    else:
-                        out_md += "> *No displayable output*\n"
-            else:
-                out_md += "**Tool Result:** *Pending or Not Available*\n"
-            return out_md
-
-        idx = 0
-        while idx < len(self.messages):
-            msg_item = self.messages[idx]
-            if msg_item.content and all(isinstance(b, ToolResultBlock) for b in msg_item.content):
-                idx += 1
-                continue
-            md_output += f"<a id=\"message-{idx}\"></a>\n### Message {idx} ({msg_item.role.value.capitalize()})\n\n"
-            message_content_md_val = ""
-            tool_result_blocks_by_id_map = {}
-            if (idx + 1) < len(self.messages):
-                next_msg_item = self.messages[idx + 1]
-                if next_msg_item.content and all(isinstance(b, ToolResultBlock) for b in next_msg_item.content):
-                    for b_item in next_msg_item.content:
-                        tool_result_blocks_by_id_map[b_item.tool_use_id] = b_item # type: ignore
-            for block_val in msg_item.content:
-                if isinstance(block_val, ToolUseBlock):
-                    tool_result_val = tool_result_blocks_by_id_map.get(block_val.id)
-                    message_content_md_val += render_block_md(block_val, tool_result_val)
-                else:
-                    message_content_md_val += render_block_md(block_val)
-            if message_content_md_val.strip():
-                md_output += message_content_md_val + "\n"
-            if message_content_md_val.strip() or idx < len(self.messages) - 1:
-                md_output += '---\n\n'
-            idx += 1
-
-        with open(output_path, 'w', encoding='utf-8') as f_out:
-            f_out.write(md_output)
-        return output_path # Return the path to the markdown file

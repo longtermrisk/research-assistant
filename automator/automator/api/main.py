@@ -284,7 +284,6 @@ async def run_agent_turn(workspace: Workspace, thread: Thread, initial_run: bool
         thread.messages.append(error_chat_message)
         try:
             workspace.add_thread(thread=thread, id=thread.id)
-            thread.to_markdown()
         except Exception as save_err:
             logger.error(f"[run_agent_turn] Failed to save thread or markdown after agent error for thread '{thread.id}': {save_err}", exc_info=True)
         api_error_msg = ApiChatMessage.from_chat_message(error_chat_message)
@@ -293,7 +292,6 @@ async def run_agent_turn(workspace: Workspace, thread: Thread, initial_run: bool
         logger.info(f"[run_agent_turn] Finished for thread '{thread.id}'")
         try:
             workspace.add_thread(thread=thread, id=thread.id) 
-            thread.to_markdown()
         except Exception as final_save_err:
             logger.error(f"[run_agent_turn] Failed final save/markdown for thread '{thread.id}': {final_save_err}", exc_info=True)
 
@@ -399,7 +397,6 @@ async def create_thread_api(thread_data: ThreadCreateRequest, workspace_name: st
         raise HTTPException(status_code=404, detail=f"Agent '{thread_data.agent_id}' not found.") from exc
     
     thread_id_to_use = thread_data.thread_id or uuid4().hex
-    
     hidden_file_blocks: List[InternalContentBlock] = []
     if thread_data.mentioned_file_paths:
         workspace_cwd = Path(ws.env.get("CWD", str(ws._root_dir / "workspace"))).resolve()
@@ -425,7 +422,6 @@ async def create_thread_api(thread_data: ThreadCreateRequest, workspace_name: st
         raise HTTPException(status_code=400, detail="Initial content cannot be empty.")
 
     final_initial_content = hidden_file_blocks + internal_initial_content
-    
     thread = await agent.run(
         query=query_for_template, # Still used for prompt template if needed
         initial_user_content=final_initial_content, # This now includes hidden file blocks + user visible blocks
@@ -435,7 +431,6 @@ async def create_thread_api(thread_data: ThreadCreateRequest, workspace_name: st
     async with _active_threads_dict_lock:
         if f"{ws.name}:{thread.id}" not in active_threads:
              active_threads[f"{ws.name}:{thread.id}"] = (thread, asyncio.Lock())
-    thread.to_markdown()
     
     asyncio.create_task(run_agent_turn(ws, thread, initial_run=True))
     
@@ -447,7 +442,6 @@ async def create_thread_api(thread_data: ThreadCreateRequest, workspace_name: st
 
 @app.get("/workspaces/{workspace_name}/threads", response_model=List[ThreadResponse])
 async def list_threads_api(ws: Workspace = Depends(get_workspace_dependency)):
-    # ... (existing logic) ...
     thread_ids = ws.list_threads()
     thread_responses = []
     for t_id in thread_ids:
@@ -469,7 +463,6 @@ async def list_threads_api(ws: Workspace = Depends(get_workspace_dependency)):
 
 @app.get("/workspaces/{workspace_name}/threads/{thread_id}", response_model=ThreadDetailResponse)
 async def get_thread_details_api(workspace_name: str, thread_id: str, ws: Workspace = Depends(get_workspace_dependency)):
-    # ... (existing logic) ...
     thread = await get_or_prepare_thread_from_cache(workspace_name, thread_id, ws)
     api_messages = [ApiChatMessage.from_chat_message(msg) for msg in thread.messages]
     first_user_message_preview = thread.get_first_user_message_preview()
@@ -513,7 +506,6 @@ async def post_message_api(workspace_name: str, thread_id: str, message_data: Me
                              ChatMessage(role=MessageRole.user, content=[TextBlock(text="Error: User message not found after run")])
 
     ws.add_thread(thread=thread, id=thread.id)
-    thread.to_markdown()
 
     api_user_msg = ApiChatMessage.from_chat_message(user_message_to_return)
     await broadcaster.broadcast(thread.id, api_user_msg.model_dump_json())

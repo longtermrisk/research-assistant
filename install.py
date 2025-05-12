@@ -39,8 +39,8 @@ def setup_mcp_dot_json():
     mcp_json = mcp_json.replace('/path/to/uv', uv_path)
     
     # Replace '/path/to/repo/' with the actual path to the repository
-    repo_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    mcp_json = mcp_json.replace('/path/to/repo/', repo_path)
+    repo_path = os.path.dirname(os.path.abspath(__file__))
+    mcp_json = mcp_json.replace('/path/to/repo', repo_path)
 
     mcp_data = json.loads(mcp_json)
     for name, config in mcp_data['mcpServers'].items():
