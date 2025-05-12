@@ -101,7 +101,7 @@
 
 /* Content Block Styling */
 .text-block {
-  white-space: pre-wrap; /* Preserve whitespace and newlines */
+  /* white-space: pre-wrap; Preserve whitespace and newlines */
   line-height: 1.6;
 }
 
@@ -125,12 +125,25 @@
   margin-top: 5px;
 }
 
+.text-block ul,
+.text-block ol {
+  padding-left: 24px; /* Default is usually 40px, reduce as needed */
+  margin: 0;     /* Remove default margin if you want */
+  padding-top: 0px; /* Space between list and text */
+  padding-bottom: 0px; /* Space between list and text */
+}
+.text-block p, .text-block li {
+  margin: 0; /* Remove default margin */
+  padding: 0; /* Remove default padding */
+}
+
 .tool-use-block, .tool-result-block, .tool-cycle-block {
   margin-top: 10px;
   padding: 10px;
   border-radius: 4px;
   background-color: rgba(0,0,0,0.1); /* Slightly darker shade within bubble */
   font-family: var(--font-family-main);
+  white-space: pre-wrap; /* Preserve whitespace and newlines */
 }
 
 .tool-use-block strong, .tool-result-block strong {

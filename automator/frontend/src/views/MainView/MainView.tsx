@@ -10,6 +10,7 @@ import {
 import './MainView.css';
 import { getMessagesSSE } from '../../services/api';
 import FileMentionInput from '../../components/FileMentionInput/FileMentionInput';
+import ReactMarkdown from 'react-markdown';
 
 interface AttachedImage {
   id: string;
@@ -52,7 +53,8 @@ const RenderContentBlock: React.FC<{
   allBlocks: ContentBlock[];
   messages: ApiChatMessage[];
   workspaceName?: string;
-}> = ({ block, index, allBlocks, messages, workspaceName }) => {
+  insideToolResultBlock?: boolean; // <-- Add this prop
+}> = ({ block, index, allBlocks, messages, workspaceName, insideToolResultBlock = false }) => {
   // Check for hidden meta flag
   if (block.meta && block.meta.hidden === true) {
     return null; // Don't render hidden blocks
@@ -71,7 +73,17 @@ const RenderContentBlock: React.FC<{
 
   switch (block.type) {
     case 'text':
-      return <div key={index} className="text-block">{(block as TextBlock).text}</div>;
+      if (insideToolResultBlock) {
+        // Plain text (not markdown)
+        return <div key={index} className="text-block">{(block as TextBlock).text}</div>;
+      } else {
+        // Render as markdown
+        return (
+          <div key={index} className="text-block">
+            <ReactMarkdown>{(block as TextBlock).text}</ReactMarkdown>
+          </div>
+        );
+      }
     case 'image':
       const imageBlock = block as ImageBlock;
       return <div key={index} className="image-block"><img src={`data:${imageBlock.source.media_type};base64,${imageBlock.source.data}`} alt="Uploaded content" /></div>;
@@ -119,6 +131,7 @@ const RenderContentBlock: React.FC<{
               allBlocks={toolResultBlock.content} 
               messages={messages} 
               workspaceName={workspaceName}
+              insideToolResultBlock={true} // <-- Pass true here
             />
           ))}
         </div>
