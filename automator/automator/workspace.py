@@ -42,7 +42,6 @@ from automator.agent import Agent , Thread
 from automator.dtypes import ChatMessage
 
 logger = logging.getLogger("uvicorn") # Or your preferred logger
-logger.error("AUTOMATOR.WORKSPACE.PY HAS BEEN RELOADED/IMPORTED (v2 with self.name)") # PROOF OF RELOAD
 
 def _ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)

@@ -144,20 +144,6 @@ providers = [
     )
 ]
 
-# ---------------------------------------------------------------------------
-# Register OpenAI models
-# ---------------------------------------------------------------------------
-
-
-if 'OPENAI_API_KEY' in os.environ:
-    _available_openai_models = [m.id for m in openai.OpenAI().models.list().data]
-    providers.append(
-        Provider(
-            get_response_factory(openai.AsyncOpenAI()),
-            models=_available_openai_models,
-        )
-    )
-
 
 # ---------------------------------------------------------------------------
 # Register OpenRouter models
@@ -170,6 +156,20 @@ if 'OPENROUTER_API_KEY' in os.environ:
             models=[
                 'google/gemini-2.5-pro-preview',
             ],
+        )
+    )
+
+# ---------------------------------------------------------------------------
+# Register OpenAI models
+# ---------------------------------------------------------------------------
+
+
+if 'OPENAI_API_KEY' in os.environ:
+    _available_openai_models = [m.id for m in openai.OpenAI().models.list().data]
+    providers.append(
+        Provider(
+            get_response_factory(openai.AsyncOpenAI()),
+            models=_available_openai_models,
         )
     )
 

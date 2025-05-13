@@ -27,7 +27,6 @@ from automator.dtypes import (
 from automator.llm import get_response
 
 logger = logging.getLogger("uvicorn")
-logger.error("AUTOMATOR.AGENT.PY HAS BEEN RELOADED/IMPORTED (v4 with initial_user_content)")
 
 load_dotenv()
 

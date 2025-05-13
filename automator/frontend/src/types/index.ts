@@ -60,7 +60,7 @@ export interface Workspace {
 export interface Agent {
   id: string;
   model: string;
-  prompt_template_yaml: string;
+  prompt_template: string; // Changed from prompt_template_yaml based on AgentResponse in main.py
   tools: string[];
   env: Record<string, string>;
   subagents: string[];
@@ -77,8 +77,8 @@ export interface ThreadSummary {
   env: Record<string, string>;
   subagents: string[];
   workspace_name: string;
-  initial_messages_count: number; // Renamed from api for clarity
-  first_user_message_preview?: string; // To be populated on frontend if needed
+  initial_messages_count: number; 
+  first_user_message_preview?: string;
 }
 
 // Corresponds to ThreadDetailResponse in api/main.py
@@ -107,22 +107,35 @@ export interface AgentCreatePayload {
 // For creating a thread (corresponds to ThreadCreateRequest on backend)
 export interface ThreadCreatePayload {
   agent_id: string;
-  initial_content: ContentBlock[];
+  initial_content: ContentBlock[]; // These are ApiContentBlock compatible
   thread_id?: string | null;
-  mentioned_file_paths?: string[]; // Added
+  mentioned_file_paths?: string[];
 }
 
 // For posting a message (corresponds to MessagePostRequest on backend)
 export interface MessagePostPayload {
-  content: ContentBlock[];
-  mentioned_file_paths?: string[]; // Added
+  content: ContentBlock[]; // These are ApiContentBlock compatible
+  mentioned_file_paths?: string[];
 }
 
-// Definition for file/folder items in the workspace
+// Definition for file/folder items in the workspace (corresponds to FileSystemItem)
 export interface FileSystemItem {
   id: string; 
   name: string; 
   path: string; 
   type: 'file' | 'folder';
   children?: FileSystemItem[]; 
+}
+
+// Corresponds to ToolDefinition in dtypes.py (used by /tools endpoint)
+export interface ToolDefinition {
+  name: string;
+  description?: string;
+  input_schema?: Record<string, any> | null;
+}
+
+// Corresponds to McpServerTools in api/main.py (used by /tools endpoint)
+export interface McpServerTools {
+  server_name: string;
+  tools: ToolDefinition[];
 }

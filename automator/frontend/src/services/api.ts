@@ -4,7 +4,8 @@ import {
   Agent, AgentCreatePayload,
   ThreadSummary, ThreadDetail, ThreadCreatePayload, MessagePostPayload,
   ApiChatMessage,
-  FileSystemItem // Added
+  FileSystemItem,
+  McpServerTools // Added McpServerTools
 } from '../types';
 
 const API_BASE_URL = 'http://localhost:8000'; // Assuming backend runs on port 8000
@@ -17,7 +18,18 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-// Workspace Endpoints
+// --- Global Endpoints ---
+export async function listModels(): Promise<string[]> {
+  const response = await fetch(`${API_BASE_URL}/models`);
+  return handleResponse<string[]>(response);
+}
+
+export async function listAvailableTools(): Promise<McpServerTools[]> {
+  const response = await fetch(`${API_BASE_URL}/tools`);
+  return handleResponse<McpServerTools[]>(response);
+}
+
+// --- Workspace Endpoints ---
 export async function createWorkspace(payload: WorkspaceCreatePayload): Promise<Workspace> {
   const response = await fetch(`${API_BASE_URL}/workspaces`, {
     method: 'POST',
@@ -37,14 +49,13 @@ export async function getWorkspaceDetails(workspaceName: string): Promise<Worksp
   return handleResponse<Workspace>(response);
 }
 
-// New function to list files in a workspace
 export async function listWorkspaceFiles(workspaceName: string): Promise<FileSystemItem[]> {
   const response = await fetch(`${API_BASE_URL}/workspaces/${workspaceName}/files`);
   return handleResponse<FileSystemItem[]>(response);
 }
 
 
-// Agent Endpoints
+// --- Agent Endpoints ---
 export async function createAgent(workspaceName: string, payload: AgentCreatePayload): Promise<Agent> {
   const response = await fetch(`${API_BASE_URL}/workspaces/${workspaceName}/agents`, {
     method: 'POST',
@@ -64,12 +75,12 @@ export async function getAgentDetails(workspaceName: string, agentId: string): P
   return handleResponse<Agent>(response);
 }
 
-// Thread Endpoints
+// --- Thread Endpoints ---
 export async function createThread(workspaceName: string, payload: ThreadCreatePayload): Promise<ThreadSummary> {
   const response = await fetch(`${API_BASE_URL}/workspaces/${workspaceName}/threads`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload), // Payload now includes mentioned_file_paths
+    body: JSON.stringify(payload),
   });
   return handleResponse<ThreadSummary>(response);
 }
@@ -88,7 +99,7 @@ export async function postMessage(workspaceName: string, threadId: string, paylo
   const response = await fetch(`${API_BASE_URL}/workspaces/${workspaceName}/threads/${threadId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload), // Payload now includes mentioned_file_paths
+    body: JSON.stringify(payload),
   });
   return handleResponse<ApiChatMessage>(response);
 }

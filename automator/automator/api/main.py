@@ -3,14 +3,13 @@ import logging
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 from uuid import uuid4
-import re # For extracting mentioned paths
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from automator.agent import Agent, Thread
+from automator.agent import Agent, Thread, _SERVERS
 from automator.dtypes import (
     Base64ImageSource,
     ChatMessage,
@@ -22,22 +21,23 @@ from automator.dtypes import (
 )
 from automator.workspace import Workspace
 from automator.gitignore_parser import load_gitignore_patterns, is_path_ignored
-
+from automator.llm import providers
 
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    # allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 logger = logging.getLogger("uvicorn")
-logger.error(
-    "AUTOMATOR.API.MAIN.PY HAS BEEN RELOADED/IMPORTED (v10 with file mentions)"
-)
 
-# --- In-memory Thread Cache ---
+
+
+# ---------------------------------------------------------------------------
+# --- In-memory Thread Cache and helpers (unchanged) ---
+# ---------------------------------------------------------------------------
+
 active_threads: Dict[str, Tuple[Thread, asyncio.Lock]] = {}
 _active_threads_dict_lock = asyncio.Lock()
 
@@ -197,6 +197,10 @@ class FileSystemItem(BaseModel):
     type: str # 'file' or 'folder'
     children: Optional[List["FileSystemItem"]] = None
 
+class McpServerTools(BaseModel):
+    server_name: str
+    tools: List[ToolDefinition]
+
 
 # --- Helper Functions ---
 def get_default_workspaces_root() -> Path:
@@ -302,7 +306,59 @@ async def run_agent_turn(workspace: Workspace, thread: Thread, initial_run: bool
 async def root():
     return {"message": "Automator API"}
 
-# ... (Workspace and Agent endpoints remain largely the same) ...
+
+# ---------------------------------------------------------------------------
+# Global endpoints: /models and /tools
+# ---------------------------------------------------------------------------
+
+@app.get("/models", response_model=List[str])
+async def list_models_api():
+    """Return all model identifiers visible through registered LLM providers."""
+    model_set: set[str] = set()
+    for prov in providers:
+        model_set.update(prov.models)
+    return sorted(model_set)
+
+
+@app.get("/tools", response_model=List[McpServerTools])
+async def list_tools_api():
+    """Enumerate every tool exposed by every MCP server using the same discovery
+    mechanism as Thread.prepare() but without side-effects.
+
+    Returns a dictionary mapping server names to lists of tool definitions. Access the tool name via response[0].tools[0].name
+    """
+    if not _SERVERS:
+        return []
+
+    # Minimal message list required by Thread
+    placeholder_messages = [
+        ChatMessage(role=MessageRole.system, content=[TextBlock(text="Tool discovery thread")])
+    ]
+
+    tools_data: List[McpServerTools] = [] # Changed from dict to list
+
+    for mcp_server in _SERVERS:
+        thread = Thread(
+            model="noop",
+            messages=placeholder_messages,
+            tools=[f"{mcp_server}.*"],
+            env={},
+            subagents=[],
+        )
+        try:
+            await thread.prepare()
+            tool_definitions = [tool.definition for tool in thread.tools]
+            tools_data.append(McpServerTools(server_name=mcp_server, tools=tool_definitions))
+        except Exception as e:
+            logger.error(f"Error preparing tools for MCP server {mcp_server}: {e}", exc_info=True)
+            tools_data.append(McpServerTools(server_name=mcp_server, tools=[])) 
+        finally:
+            try:
+                await thread.cleanup()
+            except Exception:
+                pass # Already logged if an error occurred during prepare.
+    return tools_data
+
 @app.post("/workspaces", response_model=WorkspaceResponse, status_code=201)
 async def create_workspace_api(workspace_data: WorkspaceCreate):
     try:
