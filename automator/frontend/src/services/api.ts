@@ -24,6 +24,12 @@ export async function listModels(): Promise<string[]> {
   return handleResponse<string[]>(response);
 }
 
+export async function listPrompts(): Promise<string[]> {
+  const response = await fetch(`${API_BASE_URL}/prompts`);
+  return handleResponse<string[]>(response);
+}
+
+
 export async function listAvailableTools(): Promise<McpServerTools[]> {
   const response = await fetch(`${API_BASE_URL}/tools`);
   return handleResponse<McpServerTools[]>(response);

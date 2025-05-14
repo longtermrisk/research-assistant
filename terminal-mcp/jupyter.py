@@ -1,3 +1,4 @@
+import sys
 from bs4 import BeautifulSoup
 import base64
 import nbformat
@@ -10,9 +11,10 @@ import os # Import os for path checking
 import re
 from typing import AsyncGenerator, Optional, List, Union # Ensure List and Union are imported
 
-from utils import clean_ansi # Assuming utils.py exists with clean_ansi
-from mcp.server.fastmcp import Image # Assuming this structure exists
-from server import mcp # Assuming this structure exists
+from utils import clean_ansi
+from mcp.server.fastmcp import Image
+from mcp.types import TextContent
+from server import mcp
 
 
 
@@ -94,10 +96,13 @@ def _format_notebook_to_blocks(nb: nbformat.NotebookNode, title: str) -> List[Un
                                 text_buf.append("```text\n" + plain_text + "```\n")
                         # Check for HTML data, only if not handled as image
                         if "text/html" in output.data and not handled_img:
-                           # Suppress complex HTML for now, consistent with original code
-                           # yield HtmlBlock(html=process_html(html_content), agent_sees=TextBlock(text='(Html output)'))
-                           text_buf.append("[HTML output suppressed]\n")
-                           # Note: Could potentially parse simple HTML or use HtmlBlock if available
+                            flush()
+                            html_content = output.data["text/html"]
+                            blocks.append(TextContent(
+                                type='text',
+                                text="[HTML output not displayed]\n",
+                                annotations={'display_html': process_html(html_content)},
+                            ))
 
                     # Catch all for unhandled output types
                     else:
@@ -152,43 +157,90 @@ class JupyterNotebook:
         """Initialize the Jupyter notebook."""
         self.path = path # Store path for reference
         self.notebook = None
-        # If a path is provided, try to load the notebook from the path
+        
+        # Get the venv Python executable from the current working directory
+        venv_python = os.path.abspath(os.path.join(os.getcwd(), ".venv/bin/python"))
+        if not os.path.exists(venv_python):
+            raise ValueError(f"No venv Python found at {venv_python}. Please ensure a virtual environment exists in the current working directory.")
+            
+        # Create a unique kernel name based on the cwd to avoid conflicts
+        cwd_str = os.getcwd().replace('/', '-').replace('.', '')
+        cwd_hash = sum(ord(c) * (i + 1) for i, c in enumerate(cwd_str)) % 10000
+        kernel_name = f"venv_kernel_{cwd_hash}"
+        
+        try:
+            # Check if kernel already exists
+            from jupyter_client import kernelspec
+            kernelspec.get_kernel_spec(kernel_name)
+        except:
+            # Register new kernel using the venv Python
+            import subprocess
+            import json
+            import tempfile
+            import shutil
+            
+            # Create a temporary directory for the kernel spec
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Create kernel.json
+                kernel_json = {
+                    "argv": [venv_python, "-m", "ipykernel_launcher", "-f", "{connection_file}"],
+                    "display_name": f"Venv Kernel ({cwd_hash})",
+                    "language": "python",
+                    "metadata": {"debugger": True}
+                }
+                
+                # Write kernel.json to the temp directory
+                kernel_json_path = os.path.join(temp_dir, "kernel.json")
+                with open(kernel_json_path, "w") as f:
+                    json.dump(kernel_json, f)
+                
+                # Install the kernel spec
+                try:
+                    subprocess.run([
+                        venv_python, "-m", "jupyter", "kernelspec", "install",
+                        "--user", "--name", kernel_name,
+                        "--replace",  # Replace if exists
+                        temp_dir
+                    ], check=True)
+                except subprocess.CalledProcessError as e:
+                    print(f"Failed to install kernel spec: {e}")
+                    raise
+        
+        # Load or create notebook (rest of the initialization)
         if path and os.path.exists(path):
             with open(path, 'r', encoding='utf-8') as f:
                 self.notebook = nbformat.read(f, as_version=4)
             print(f"Loaded notebook from {path}")
         else:
-            # Create a new notebook if no path is provided or path doesn't exist
             self.notebook = nbformat.v4.new_notebook()
             if path:
-                 print(f"Path {path} not found. Created a new notebook.")
+                print(f"Path {path} not found. Created a new notebook.")
             else:
-                 print("Created a new temporary notebook.")
+                print("Created a new temporary notebook.")
 
-        self.km = None # Kernel Manager
-        self.kc = None # Kernel Client (managed by NotebookClient)
+        self.km = None
+        self.kc = None
         self.client = NotebookClient(
             self.notebook,
             timeout=600,
             allow_errors=True,
-            kernel_name='python3',
-            # resources={'metadata': {'path': os.path.dirname(path) if path else '.'}} # Set cwd for kernel
+            kernel_name=kernel_name,
         )
-        # Set working directory for the kernel if path is provided
+        
+        # Set working directory for the kernel
         if path:
-             self.client.resources = {'metadata': {'path': os.path.dirname(os.path.abspath(path))}}
+            self.client.resources = {'metadata': {'path': os.path.dirname(os.path.abspath(path))}}
         else:
-             self.client.resources = {'metadata': {'path': os.getcwd()}}
-
+            self.client.resources = {'metadata': {'path': os.getcwd()}}
 
     async def setup(self):
         """Initialize the kernel if not already initialized."""
         if self.client.kc is None:
             # Create and start kernel manager if not exists
             if self.km is None:
-                self.km = AsyncKernelManager(kernel_name='python3')
-                await self.km.start_kernel(cwd=self.client.resources['metadata']['path']) # Pass cwd here
-            
+                self.km = AsyncKernelManager(kernel_name=self.client.kernel_name)  # Use same kernel name as client
+                await self.km.start_kernel(cwd=self.client.resources['metadata']['path'])
+         
             # Assign the kernel manager to the client
             # Note: nbclient >= 0.8.0 prefers setting km directly
             # For older versions you might need self.client.km = self.km
@@ -247,8 +299,8 @@ class JupyterNotebook:
         print("Finished executing all existing cells.")
 
 
-    async def execute_new_code(self, code: str) -> AsyncGenerator[Union[str, Image], None]:
-        """Append a new code cell, execute it, and yield its outputs."""
+    async def execute_new_code(self, code: str) -> List[Union[TextContent, Image]]:
+        """Append a new code cell, execute it, and return its outputs."""
         # Ensure kernel is initialized
         await self.setup()
 
@@ -260,10 +312,12 @@ class JupyterNotebook:
         # Execute the newly added cell
         await self.execute_cell(cell)
 
-        # Process and yield outputs from the *newly executed cell*
+        # Process outputs from the *newly executed cell*
+        results: List[Union[TextContent, Image]] = []
+        
         if not hasattr(cell, 'outputs'):
             print("Cell finished execution, no outputs generated.")
-            return # No outputs to yield
+            return results
 
         print(f"Processing {len(cell.outputs)} outputs for the new cell...")
         for output in cell.outputs:
@@ -272,14 +326,17 @@ class JupyterNotebook:
             if output_type == 'error':
                 # Handle error output
                 error_msg = '\n'.join(output.get('traceback', []))
-                yield clean_ansi(f"Error: {output.ename}\n{error_msg}")
+                results.append(TextContent(
+                    type='text',
+                    text=clean_ansi(f"Error: {output.ename}\n{error_msg}")
+                ))
 
             elif output_type == 'stream':
                 # Handle stdout/stderr, clean ANSI codes
                 stream_text = output.get('text', '')
                 cleaned_text = clean_ansi(stream_text).strip()
-                if cleaned_text: # Yield only if there's non-empty text
-                    yield cleaned_text
+                if cleaned_text: # Add only if there's non-empty text
+                    results.append(TextContent(type='text', text=cleaned_text))
 
             elif output_type == 'display_data' or output_type == 'execute_result':
                 data = output.get('data', {})
@@ -291,20 +348,21 @@ class JupyterNotebook:
                     if isinstance(img_data, str):
                         try:
                             img_data = base64.b64decode(img_data)
-                            yield Image(data=img_data, format='png')
+                            results.append(Image(data=img_data, format='png'))
                         except Exception as e:
-                            yield f"[Error decoding base64 PNG: {e}]"
+                            results.append(TextContent(type='text', text=f"[Error decoding base64 PNG: {e}]"))
                     elif isinstance(img_data, bytes):
-                         yield Image(data=img_data, format='png')
+                         results.append(Image(data=img_data, format='png'))
                     continue # Don't process other formats if image was shown
 
-                # Handle HTML (suppressed, show placeholder)
-                # TODO: Implement proper HTML handling if needed
+                # Handle HTML
                 elif 'text/html' in data:
-                    # Check for plotly specific require call, skip if found (avoids duplicate output)
                     html_content = data['text/html']
-                    # yield HtmlBlock(html=process_html(html_content), agent_sees=TextBlock(text='(Html output)'))
-                    yield "(Html output)" # Placeholder
+                    results.append(TextContent(
+                        type='text',
+                        text="[HTML output not displayed]\n",
+                        annotations={'display_html': process_html(html_content)},
+                    ))
                     continue # Don't process plain text if HTML was primary
 
                 # Handle plain text as fallback
@@ -313,10 +371,12 @@ class JupyterNotebook:
                     if isinstance(text_content, list): # Sometimes it's a list of strings
                         text_content = '\n'.join(text_content)
                     cleaned_text = clean_ansi(text_content).strip()
-                    if cleaned_text: # Yield only if there's non-empty text
-                         yield cleaned_text
+                    if cleaned_text: # Add only if there's non-empty text
+                         results.append(TextContent(type='text', text=cleaned_text))
             else: # Optionally log unhandled types
-                 yield(f"Note: Unhandled output type '{output_type}' encountered.")
+                 results.append(TextContent(type='text', text=f"Note: Unhandled output type '{output_type}' encountered."))
+        
+        return results
 
     def save(self):
         """Save the notebook to the specified path."""
@@ -434,11 +494,8 @@ async def jupyter(
 
     # Now, execute the *new* code provided in the call
     print(f"Executing provided code in notebook for key: {notebook_key}...")
-    new_cell_outputs = []
     try:
-        async for output in notebook.execute_new_code(code):
-            new_cell_outputs.append(output)
-        print("Finished executing provided code.")
+        new_cell_outputs = await notebook.execute_new_code(code)
     except Exception as e:
         # Catch unexpected errors during the execution of the new code
         import traceback

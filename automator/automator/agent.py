@@ -136,8 +136,9 @@ class McpServerToolCall:
         result = await self.mcp_session.call_tool(self.name, self.tool_use_block.input)
         blocks = []
         for item in result.content:
-            if item.type == "text": blocks.append(TextBlock(text=item.text))
-            elif item.type == "image": blocks.append(ImageBlock.from_base64(data=item.data, media_type=item.mimeType))
+            meta = item.annotations.model_dump() if item.annotations is not None else {}
+            if item.type == "text": blocks.append(TextBlock(text=item.text, meta=meta))
+            elif item.type == "image": blocks.append(ImageBlock.from_base64(data=item.data, media_type=item.mimeType, meta=meta))
             else: raise ValueError(f"Unknown block type: {item.type}")
         return ToolResultBlock(tool_use_id=self.tool_use_block.id, content=blocks)
 

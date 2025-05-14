@@ -13,11 +13,11 @@ const AgentManagementView: React.FC = () => {
 
   const [showCreateForm, setShowCreateForm] = useState<boolean>(false);
   
-  const initialDefaultModel = 'claude-3-haiku-20240307'; // A common default
+  const initialDefaultModel = 'claude-3-7-sonnet-20250219';
   const initialNewAgentState: Partial<AgentCreatePayload> = {
     id: '',
     model: initialDefaultModel,
-    prompt_template_yaml: 'prompts/chatgpt.yaml', // A common default
+    prompt_template_yaml: 'chatgpt.yaml',
     tools: [],
     subagents: [],
     env: {},
@@ -30,6 +30,8 @@ const AgentManagementView: React.FC = () => {
   const [isLoadingModels, setIsLoadingModels] = useState<boolean>(false);
   const [availableTools, setAvailableTools] = useState<string[]>([]); // Flattened list for select options
   const [isLoadingTools, setIsLoadingTools] = useState<boolean>(false);
+  const [availablePrompts, setAvailablePrompts] = useState<string[]>([]);
+  const [isLoadingPrompts, setIsLoadingPrompts] = useState<boolean>(false);
 
   const fetchAgents = async () => {
     if (!currentWorkspace) return;
@@ -76,6 +78,19 @@ const AgentManagementView: React.FC = () => {
         setIsLoadingModels(false);
       };
 
+      // Fetch prompts
+      const loadPrompts = async () => {
+        setIsLoadingPrompts(true);
+        try {
+          const prompts = await api.listPrompts(); 
+          setAvailablePrompts(prompts);
+        } catch (err: any) {
+          console.error("Failed to fetch prompts:", err);
+          setError(prevError => (prevError ? prevError + "\n" : "") + "Failed to fetch prompts.");
+        }
+        setIsLoadingPrompts(false);
+      };
+
       // Fetch tools
       const loadTools = async () => {
         setIsLoadingTools(true);
@@ -100,6 +115,7 @@ const AgentManagementView: React.FC = () => {
       
       loadModels();
       loadTools();
+      loadPrompts();
       // Agents for subagent dropdown are already available via `agents` state
     }
   }, [showCreateForm, currentWorkspace]); // Re-fetch if workspace changes while form is open
@@ -205,7 +221,20 @@ const AgentManagementView: React.FC = () => {
               </div>
               <div className="form-group full-width">
                 <label htmlFor="prompt_template_yaml">Prompt Template YAML*</label>
-                <input type="text" name="prompt_template_yaml" id="prompt_template_yaml" value={newAgent.prompt_template_yaml || ''} onChange={handleInputChange} required />
+                <select 
+                  name="prompt_template_yaml" 
+                  id="prompt_template_yaml" 
+                  value={newAgent.prompt_template_yaml || ''} 
+                  onChange={handleInputChange} 
+                  required
+                >
+                  <option value="">Select a prompt template</option>
+                  {isLoadingPrompts && <option value="">Loading prompts...</option>}
+                  {!isLoadingPrompts && availablePrompts.length === 0 && <option value="">No prompts available</option>}
+                  {!isLoadingPrompts && availablePrompts.map(template => (
+                    <option key={template} value={template}>{template}</option>
+                  ))}
+                </select>
               </div>
               <div className="form-group">
                 <label htmlFor="tools">Tools (Ctrl/Cmd+click for multiple)</label>

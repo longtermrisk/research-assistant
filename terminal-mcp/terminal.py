@@ -7,10 +7,12 @@ import random
 from collections import deque
 from typing import Dict, Any, List, Tuple
 
+from mcp.types import TextContent
 import pexpect  # pseudo‑terminal handling
 from utils import clean_ansi 
 
 from server import mcp
+
 
 # ---------------------------------------------------------------------------
 # Configuration constants
@@ -236,5 +238,4 @@ async def _handle_terminal_output(
         f.write(f"\n\n======== {log_prefix}({log_args}) ========\n")
         f.write(response)
 
-    return response
-
+    return TextContent(text=response, annotations={'display_html': f"<pre>{response}</pre>"}, type="text")

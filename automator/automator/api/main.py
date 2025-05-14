@@ -1,3 +1,4 @@
+import os
 import asyncio
 import logging
 from pathlib import Path
@@ -317,8 +318,13 @@ async def list_models_api():
     model_set: set[str] = set()
     for prov in providers:
         model_set.update(prov.models)
-    return sorted(model_set)
+    return model_set
 
+@app.get("/prompts", response_model=List[str])
+async def list_prompts_api():
+    """Return all prompt identifiers visible through registered LLM providers."""
+    prompts = os.listdir(os.path.expanduser("~/.automator/prompts"))
+    return sorted(prompts)
 
 @app.get("/tools", response_model=List[McpServerTools])
 async def list_tools_api():

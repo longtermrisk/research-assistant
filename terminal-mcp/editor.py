@@ -11,8 +11,10 @@ import pandas as pd
 import nbformat
 import git
 from PIL import Image as PILImage
+import difflib
 
 from mcp.server.fastmcp import Context, Image
+from mcp.types import TextContent
 from static_code_analysis import analyze_and_format
 from server import mcp
 
@@ -242,6 +244,13 @@ async def write_file(
             pd.read_csv(io.StringIO(cleaned_content))
         except pd.errors.ParserError as e:
             return f"Error: Invalid CSV content in {path}: {e}"
+    
+    # Read the file to get existing content if it exists
+    try:
+        with open(full_path, "r", encoding="utf-8") as f:
+            existing_content = f.read()
+    except FileNotFoundError:
+        existing_content = ""
 
     try:
         with open(full_path, "w", encoding='utf-8') as f:
@@ -262,8 +271,41 @@ async def write_file(
                  response += f"\nLinting skipped: File type not recognized ({os.path.splitext(path)[1]})."
         except Exception as e:
             response += f"\nError during linting/formatting: {e}"
+    return response_with_filediff(existing_content, cleaned_content, response)
 
-    return response
+def response_with_filediff(existing_content: str, new_content: str, response: str) -> TextContent:
+    """
+    Returns: TextContent(response, annotations={'display_html': <a file diff with red/green> highlights>})
+    """
+    # Generate a diff using difflib
+    diff = difflib.unified_diff(
+        existing_content.splitlines(keepends=True),
+        new_content.splitlines(keepends=True),
+        fromfile='Existing Content',
+        tofile='New Content',
+        lineterm=''
+    )
+    # Convert diff to HTML with GitHub-style highlighting
+    diff_html = '<div style="font-family: monospace; white-space: pre;">'
+    for line in diff:
+        if line.startswith('+'):
+            # Darker green background for additions
+            diff_html += f'<div style="background-color: #0f5323">{line}</div>'
+        elif line.startswith('-'):
+            # Darker red background for deletions  
+            diff_html += f'<div style="background-color: #5c1e1e">{line}</div>'
+        elif line.startswith('@@'):
+            # Darker blue/gray background for diff headers
+            diff_html += f'<div style="background-color: #1f364d">{line}</div>'
+        else:
+            # No background for context lines
+            diff_html += f'<div>{line}</div>'
+    diff_html += '</div>'
+    return TextContent(
+        text=response,
+        type="text",
+        annotations={'display_html': diff_html}
+    )
 
 # --- MCP Tool (List Codebase Files) ---
 @mcp.tool()

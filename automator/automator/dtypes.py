@@ -1,3 +1,4 @@
+import os
 import json
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Union
@@ -80,8 +81,8 @@ class ImageBlock(BaseModel):
     meta: Optional[Dict[str, Any]] = None
 
     @staticmethod
-    def from_base64(data: str, media_type: str = "image/png") -> "ImageBlock":
-        return ImageBlock(source=Base64ImageSource(data=data, media_type=media_type))
+    def from_base64(data: str, media_type: str = "image/png", meta=None) -> "ImageBlock":
+        return ImageBlock(source=Base64ImageSource(data=data, media_type=media_type, meta=meta))
     
     def anthropic_format(self) -> Dict[str, Any]:
         return {
@@ -151,6 +152,10 @@ class PromptTemplate(BaseModel):
 
     @staticmethod
     def from_yaml(file: str) -> "PromptTemplate":
+        if not os.path.exists(file) and os.path.exists(os.path.join(os.path.expanduser('~/.automator/prompts'), file)):
+            file = os.path.join(os.path.expanduser('~/.automator/prompts'), file)
+        if not os.path.exists(file):
+            raise FileNotFoundError(f"Prompt template file not found: {file}")
         with open(file) as f:
             messages = yaml.load(f, Loader=yaml.FullLoader)["messages"]
         for message in messages:

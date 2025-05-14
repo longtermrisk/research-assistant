@@ -37,6 +37,7 @@ import os
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
+import subprocess
 
 from automator.agent import Agent , Thread
 from automator.dtypes import ChatMessage
@@ -52,6 +53,16 @@ def _slugify(name: str) -> str:
             name = name.replace(sep, "-")
     allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
     return "".join(c if c in allowed else "-" for c in name).strip("-_.")
+
+def _ensure_venv(path: Path) -> None:
+    pyproject_path = path / "pyproject.toml"
+    if not pyproject_path.exists():
+        subprocess.run(["uv", "init"], check=True, cwd=path)
+    venv_path = path / ".venv"
+    if not venv_path.exists():
+        subprocess.run(["uv", "venv"], check=True, cwd=path)
+    # subprocess.run(["uv", "add", "ipykernel", "pip", "ipython", "jupyterlab", "plotly", "matplotlib"], check=True, cwd=path)
+    subprocess.run(["uv", "add", "ipykernel", "pip", "ipython", "jupyterlab"], check=True, cwd=path)
 
 class Workspace:
     def __init__(self, name: str, env: Optional[Dict[str, str]] = None):
@@ -85,6 +96,8 @@ class Workspace:
             
         # Ensure the workspace directory exists
         os.makedirs(self.env['CWD'], exist_ok=True)
+        # Ensure venv exists in the workspace directory
+        _ensure_venv(Path(self.env['CWD']))
 
     @staticmethod
     def _resolve_workspace_dir(name: str) -> Path:

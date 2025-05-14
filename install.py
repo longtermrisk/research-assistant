@@ -1,6 +1,7 @@
 import subprocess
 import os
 import json
+import shutil
 
 
 def ensure_uv():
@@ -159,6 +160,8 @@ def install_repo():
     if not os.path.exists(os.path.expanduser('~/mcp.json')):
         setup_mcp_dot_json()
     os.makedirs(os.path.expanduser('~/.automator/workspaces'), exist_ok=True)
+    # cp prompts ~/.automator/prompts
+    shutil.copytree(os.path.join(os.path.dirname(__file__), 'automator/prompts'), os.path.expanduser('~/.automator/prompts'), dirs_exist_ok=True)
     setup_component('terminal-mcp')
     setup_component('web-mcp')
     setup_component('talk-to-model')
