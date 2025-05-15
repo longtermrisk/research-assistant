@@ -9,8 +9,8 @@ import {
 } from '../../types';
 import './MainView.css';
 import { getMessagesSSE } from '../../services/api';
-import FileMentionInput from '../../components/FileMentionInput/FileMentionInput';
-import ReactMarkdown from 'react-markdown';
+import { MessageBubble } from './MessageBubble';
+import MessageInputArea from './MessageInputArea';
 
 interface AttachedImage {
   id: string;
@@ -19,179 +19,49 @@ interface AttachedImage {
   media_type: string;
 }
 
-const extractTextForCopy = (block: ContentBlock, messagesForContext: ApiChatMessage[], currentWorkspaceName?: string): string => {
+const extractTextForCopy = (
+  block: ContentBlock,
+  messagesForContext: ApiChatMessage[],
+  currentWorkspaceName?: string
+): string => {
   switch (block.type) {
     case 'text':
-    if (block.meta && block.meta.hidden) return ""; 
-    return (block as TextBlock).text;
+      if (block.meta && block.meta.hidden) return '';
+      return (block as TextBlock).text;
     case 'image':
-    return "[Image Content]";
+      return '[Image Content]';
     case 'tool_use':
-    const tuBlock = block as ToolUseBlock;
-    return `Tool Call: ${tuBlock.name} (ID: ${tuBlock.id})\nInput:\n${JSON.stringify(tuBlock.input, null, 2)}`;
+      const tuBlock = block as ToolUseBlock;
+      return `Tool Call: ${tuBlock.name} (ID: ${tuBlock.id})\nInput:\n${JSON.stringify(
+        tuBlock.input,
+        null,
+        2
+      )}`;
     case 'tool_result':
-    const trBlock = block as ToolResultBlock;
-    let resultText = `Result for Tool Call ID: ${trBlock.tool_use_id}\n`;
-    if (trBlock.meta?.thread_id && currentWorkspaceName) {
-      resultText += `(Subagent Thread: /workspace/${currentWorkspaceName}/thread/${trBlock.meta.thread_id}`;
-      if (typeof trBlock.meta.message_start === 'number') {
-        resultText += `#message-${trBlock.meta.message_start}`;
-      }
-      resultText += ")\n";
-    }
-    resultText += trBlock.content.map(cb => extractTextForCopy(cb, messagesForContext, currentWorkspaceName)).join('\n');
-    return resultText;
-    default:
-    return "[Unsupported Block Type]";
-  }
-};
-
-const RenderContentBlock: React.FC<{
-  block: ContentBlock;
-  index: number;
-  allBlocks: ContentBlock[];
-  messages: ApiChatMessage[];
-  workspaceName?: string;
-  insideToolResultBlock?: boolean;
-}> = ({ block, index, allBlocks, messages, workspaceName, insideToolResultBlock = false }) => {
-  if (block.meta && block.meta.hidden === true) {
-    return null;
-  }
-  
-  const findCorrespondingToolUse = (toolResultId: string): ToolUseBlock | undefined => {
-    for (const msg of messages) {
-      for (const b of msg.content) {
-        if (b.type === 'tool_use' && b.id === toolResultId) {
-          return b as ToolUseBlock;
+      const trBlock = block as ToolResultBlock;
+      let resultText = `Result for Tool Call ID: ${trBlock.tool_use_id}\n`;
+      if (trBlock.meta?.thread_id && currentWorkspaceName) {
+        resultText += `(Subagent Thread: /workspace/${currentWorkspaceName}/thread/${trBlock.meta.thread_id}`;
+        if (typeof trBlock.meta.message_start === 'number') {
+          resultText += `#message-${trBlock.meta.message_start}`;
         }
+        resultText += ')\n';
       }
-    }
-    return undefined;
-  };
-  
-  switch (block.type) {
-    case 'text':
-      const textBlock = block as TextBlock;
-      if (textBlock.meta?.display_html && typeof textBlock.meta.display_html === 'string') {
-        const htmlContent = textBlock.meta.display_html;
-        
-        // Check if it's a full HTML document (likely for Plotly or similar rich HTML outputs)
-        if (htmlContent.trim().toLowerCase().startsWith('<!doctype html>')) {
-          return (
-            <iframe
-            key={index}
-            className="html-display plotly-iframe" // Specific class for styling if needed
-            srcDoc={htmlContent}
-            style={{ width: '100%', height: '450px', border: 'none' }} // Initial height, can be adjusted
-            sandbox="allow-scripts" // Essential for Plotly's JavaScript to run
-            onLoad={(e) => {
-              const iframe = e.target as HTMLIFrameElement;
-              // Attempt to auto-adjust height after Plotly renders.
-              // This is a best-effort approach as Plotly's rendering is asynchronous.
-              if (iframe.contentWindow && iframe.contentWindow.document.body) {
-                setTimeout(() => {
-                  try {
-                    const body = iframe.contentWindow.document.body;
-                    const htmlDoc = iframe.contentWindow.document.documentElement;
-                    // Use the maximum of scrollHeight and offsetHeight for body and documentElement
-                    const contentHeight = Math.max(
-                      body.scrollHeight, body.offsetHeight,
-                      htmlDoc.scrollHeight, htmlDoc.offsetHeight, htmlDoc.clientHeight
-                    );
-                    // Set a minimum height and ensure contentHeight is a valid positive number
-                    if (contentHeight && contentHeight > 0) {
-                      iframe.style.height = `${Math.max(300, contentHeight)}px`;
-                    }
-                    // If contentHeight is 0 or invalid, it will retain its initial style.height (450px)
-                  } catch (err) {
-                    console.warn("Error adjusting iframe height:", err);
-                    // In case of cross-origin issues accessing contentWindow properties after navigation or complex content
-                  }
-                }, 500); // Delay (in ms) to allow Plotly to render. You might need to adjust this value.
-              }
-            }}
-            />
-          );
-        } else {
-          // For simpler HTML snippets (e.g., Pandas tables), use the existing method
-          return (
-            <div
-            key={index}
-            className="text-block html-display"
-            dangerouslySetInnerHTML={{ __html: htmlContent }}
-            />
-          );
-        }
-      }
-      // Default rendering for text content using ReactMarkdown
-      return (
-        <div key={index} className="text-block">
-        <ReactMarkdown>{(block as TextBlock).text}</ReactMarkdown>
-        </div>
-      );
-    case 'image':
-      const imageBlock = block as ImageBlock;
-      return <div key={index} className="image-block"><img src={`data:${imageBlock.source.media_type};base64,${imageBlock.source.data}`} alt="Uploaded content" /></div>;
-      case 'tool_use':
-      const toolUseBlock = block as ToolUseBlock;
-      return (
-        <div key={index} className="tool-use-block">
-        <strong>Tool Call: {toolUseBlock.name} (ID: {toolUseBlock.id})</strong>
-        <pre>{JSON.stringify(toolUseBlock.input, null, 2)}</pre>
-        </div>
-      );
-    case 'tool_result':
-      const toolResultBlock = block as ToolResultBlock;
-      const correspondingToolUse = findCorrespondingToolUse(toolResultBlock.tool_use_id);
-      let resultPrefix = `Result for Tool Call ID: ${toolResultBlock.tool_use_id}`;
-      if (correspondingToolUse) {
-        resultPrefix = `Result for ${correspondingToolUse.name} (ID: ${toolResultBlock.tool_use_id})`;
-      }
-      
-      let subagentLinkElement: React.ReactNode = null;
-      if (toolResultBlock.meta?.thread_id && workspaceName) {
-        const subThreadPath = `/workspace/${workspaceName}/thread/${toolResultBlock.meta.thread_id}`;
-        const linkTarget = typeof toolResultBlock.meta.message_start === 'number' 
-        ? `${subThreadPath}#message-${toolResultBlock.meta.message_start}`
-        : subThreadPath;
-        subagentLinkElement = (
-          <div className="subagent-link">
-          <Link to={linkTarget}>
-          View Subagent Thread: {toolResultBlock.meta.thread_id}
-          {typeof toolResultBlock.meta.message_start === 'number' && ` (from message ${toolResultBlock.meta.message_start})`}
-          </Link>
-          </div>
-        );
-      }
-    
-    return (
-      <div key={index} className="tool-result-block">
-      <strong>{resultPrefix}</strong>
-      {subagentLinkElement}
-      {(toolResultBlock.content).map((contentItem, idx) => (
-        <RenderContentBlock 
-          key={idx} 
-          block={contentItem} 
-          index={idx} 
-          allBlocks={toolResultBlock.content} 
-          messages={messages} 
-          workspaceName={workspaceName}
-          insideToolResultBlock={true}
-        />
-      ))}
-      </div>
-    );
+      resultText += trBlock.content
+        .map((cb) => extractTextForCopy(cb, messagesForContext, currentWorkspaceName))
+        .join('\n');
+      return resultText;
     default:
-    return <div key={index} className="unknown-block">Unsupported block type</div>;
+      return '[Unsupported Block Type]';
   }
 };
 
 const MainView: React.FC = () => {
   const { currentWorkspace } = useWorkspace();
-  const { workspaceName, threadId } = useParams<{ workspaceName: string; threadId?: string; }>();
+  const { workspaceName, threadId } = useParams<{ workspaceName: string; threadId?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const [currentThread, setCurrentThread] = useState<ThreadDetail | null>(null);
   const [messages, setMessages] = useState<ApiChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState<string>('');
@@ -201,103 +71,69 @@ const MainView: React.FC = () => {
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
   const [selectedAgentForNewThread, setSelectedAgentForNewThread] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  
+
   const [mentionedFilePaths, setMentionedFilePaths] = useState<string[]>([]);
   const [workspaceFiles, setWorkspaceFiles] = useState<FileSystemItem[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(false);
-  
-  
+
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  
+
   useEffect(() => {
-    if (currentWorkspace && currentWorkspace.name) {
+    if (currentWorkspace && currentWorkspace.name && workspaceName) {
       setIsLoadingFiles(true);
-      api.listWorkspaceFiles(currentWorkspace.name)
-      .then(files => {
-        setWorkspaceFiles(files);
-        setIsLoadingFiles(false);
-      })
-      .catch(err => {
-        console.error('Failed to load workspace files:', err);
-        setError('Failed to load workspace files: ' + err.message);
-        setIsLoadingFiles(false);
-      });
-      
-      api.listAgents(currentWorkspace.name)
-      .then(setAvailableAgents)
-      .catch(err => {
-        console.error('Failed to load agents:', err);
-        setError(prev => prev || ('Failed to load agents: ' + err.message));
-      });
-    }
-  }, [currentWorkspace]);
-  
-  
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve((reader.result as string).split(',')[1]);
-      reader.onerror = error => reject(error);
-    });
-  };
-  
-  const handleImageAttach = useCallback(async (files: FileList | null) => {
-    if (!files) return;
-    const imageFiles = Array.from(files).filter(file => 
-      ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)
-    );
-    if (imageFiles.length === 0) return;
-    setIsLoading(true);
-    try {
-      const newAttachedImages: AttachedImage[] = await Promise.all(
-        imageFiles.map(async (file) => {
-          const base64 = await fileToBase64(file);
-          return { id: `${file.name}-${Date.now()}`, file, base64, media_type: file.type };
+      api
+        .listWorkspaceFiles(workspaceName)
+        .then((files) => {
+          setWorkspaceFiles(files);
+          setIsLoadingFiles(false);
         })
-      );
-      setAttachedImages(prev => [...prev, ...newAttachedImages]);
-    } catch (err) {
-      console.error("Error processing images:", err);
-      setError("Failed to attach images.");
+        .catch((err) => {
+          console.error('Failed to load workspace files:', err);
+          setError('Failed to load workspace files: ' + err.message);
+          setIsLoadingFiles(false);
+        });
+
+      api
+        .listAgents(workspaceName)
+        .then(setAvailableAgents)
+        .catch((err) => {
+          console.error('Failed to load agents:', err);
+          setError((prev) => prev || 'Failed to load agents: ' + err.message);
+        });
     }
-    setIsLoading(false);
-  }, []);
-  
-  const handleRemoveImage = (idToRemove: string) => {
-    setAttachedImages(prev => prev.filter(img => img.id !== idToRemove));
-  };
-  
+  }, [currentWorkspace, workspaceName]);
+
   useEffect(() => {
     if (!currentWorkspace || !workspaceName) return;
     if (threadId) {
       setIsLoading(true);
       setError(null);
-      api.getThreadDetails(workspaceName, threadId)
-      .then(threadDetails => {
-        setCurrentThread(threadDetails);
-        setMessages(threadDetails.messages || []);
-        setIsLoading(false);
-      })
-      .catch(err => {
-        console.error('Failed to load thread details:', err);
-        setError(err.message || 'Failed to load thread');
-        setIsLoading(false);
-      });
-      
+      api
+        .getThreadDetails(workspaceName, threadId)
+        .then((threadDetails) => {
+          setCurrentThread(threadDetails);
+          setMessages(threadDetails.messages || []);
+          setIsLoading(false);
+        })
+        .catch((err) => {
+          console.error('Failed to load thread details:', err);
+          setError(err.message || 'Failed to load thread');
+          setIsLoading(false);
+        });
+
       const sse = getMessagesSSE(workspaceName, threadId);
       sse.onmessage = (event) => {
         const newMessageData = JSON.parse(event.data) as ApiChatMessage;
-        setMessages(prevMessages => [...prevMessages, newMessageData]);
+        // Ensure new messages also have an ID if possible, or are handled correctly by findIndex
+        // For now, assuming backend provides IDs for SSE messages too.
+        setMessages((prevMessages) => [...prevMessages, newMessageData]);
       };
       sse.onerror = (err) => {
         console.error('SSE Error:', err);
-        setError(prev => prev || 'Connection error with server updates.');
+        setError((prev) => prev || 'Connection error with server updates.');
         sse.close();
       };
       return () => sse.close();
@@ -308,49 +144,53 @@ const MainView: React.FC = () => {
       setSelectedAgentForNewThread(agentIdFromLocation || null);
     }
   }, [currentWorkspace, workspaceName, threadId, location.state]);
-  
+
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
-  
+
   useEffect(scrollToBottom, [messages, attachedImages]);
-  
+
   const handleScroll = () => {
     if (chatContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
       setIsScrolledUp(scrollTop < scrollHeight - clientHeight - 50);
     }
   };
-  
+
   useEffect(() => {
     const chatContainer = chatContainerRef.current;
     chatContainer?.addEventListener('scroll', handleScroll);
     return () => chatContainer?.removeEventListener('scroll', handleScroll);
   }, []);
-  
+
   const handleSendMessage = async () => {
     if (!newMessage.trim() && attachedImages.length === 0) return;
     if (!currentWorkspace || !workspaceName) return;
-    
+
     setError(null);
     setIsLoading(true);
-    
+
     const contentBlocks: ContentBlock[] = [];
     if (newMessage.trim()) {
-      contentBlocks.push({ type: "text", text: newMessage.trim() });
+      contentBlocks.push({ type: 'text', text: newMessage.trim() });
     }
-    attachedImages.forEach(img => {
+    attachedImages.forEach((img) => {
       contentBlocks.push({
-        type: "image",
-        source: { type: "base64", media_type: img.media_type, data: img.base64 } as Base64ImageSource,
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: img.media_type,
+          data: img.base64,
+        } as Base64ImageSource,
       });
     });
-    
-    const payload = { 
+
+    const payload = {
       content: contentBlocks,
-      mentioned_file_paths: mentionedFilePaths.length > 0 ? mentionedFilePaths : undefined
+      mentioned_file_paths: mentionedFilePaths.length > 0 ? mentionedFilePaths : undefined,
     };
-    
+
     if (currentThread && threadId) {
       try {
         await api.postMessage(workspaceName, threadId, payload);
@@ -364,8 +204,8 @@ const MainView: React.FC = () => {
       try {
         const newThreadSummary = await api.createThread(workspaceName, {
           agent_id: selectedAgentForNewThread,
-          initial_content: contentBlocks, 
-          mentioned_file_paths: mentionedFilePaths.length > 0 ? mentionedFilePaths : undefined
+          initial_content: contentBlocks,
+          mentioned_file_paths: mentionedFilePaths.length > 0 ? mentionedFilePaths : undefined,
         });
         setNewMessage('');
         setAttachedImages([]);
@@ -377,241 +217,200 @@ const MainView: React.FC = () => {
       }
     }
     setIsLoading(false);
-  }; 
-  
+  };
+
   const handleAgentSelectionForNewThread = (agentId: string) => {
+    if (!workspaceName) return;
     setSelectedAgentForNewThread(agentId);
-    navigate(`/workspace/${workspaceName}`); 
-  }
-  
+    navigate(`/workspace/${workspaceName}`);
+  };
+
   const handleCopyMessage = (msg: ApiChatMessage, msgIndex: number) => {
-    let contentToCopy = "";
+    let contentToCopy = '';
     if (msg.role === MessageRole.Assistant) {
-      msg.content.forEach(block => {
-        contentToCopy += extractTextForCopy(block, messages, workspaceName) + "\n";
+      msg.content.forEach((block) => {
+        contentToCopy += extractTextForCopy(block, messages, workspaceName) + '\n';
         if (block.type === 'tool_use') {
           const nextMessage = messages[msgIndex + 1];
-          if (nextMessage && nextMessage.role === MessageRole.User && nextMessage.content.every(c => c.type === 'tool_result')) {
-            const resultBlock = nextMessage.content.find(b => (b as ToolResultBlock).tool_use_id === block.id) as ToolResultBlock | undefined;
+          if (
+            nextMessage &&
+            nextMessage.role === MessageRole.User
+            // Removed: nextMessage.content.every((c) => c.type === 'tool_result')
+          ) {
+            const resultBlock = nextMessage.content.find(
+              (b) => b.type === 'tool_result' && (b as ToolResultBlock).tool_use_id === (block as ToolUseBlock).id
+            ) as ToolResultBlock | undefined;
             if (resultBlock) {
-              contentToCopy += extractTextForCopy(resultBlock, messages, workspaceName) + "\n";
+              contentToCopy += extractTextForCopy(resultBlock, messages, workspaceName) + '\n';
             }
           }
         }
       });
     } else {
       contentToCopy = msg.content
-      .filter(block => !(block.meta && block.meta.hidden)) 
-      .map(block => (block as TextBlock).text)
-      .join('\n');
+        .filter((block) => !(block.meta && block.meta.hidden))
+        .map((block) => (block.type === 'text' ? (block as TextBlock).text : '[Non-Text Content]'))
+        .join('\n');
     }
-    navigator.clipboard.writeText(contentToCopy.trim())
-    .then(() => {
-      setCopiedMessageIndex(msgIndex);
-      setTimeout(() => setCopiedMessageIndex(null), 2000);
-    })
-    .catch(err => console.error("Failed to copy: ", err));
+    navigator.clipboard
+      .writeText(contentToCopy.trim())
+      .then(() => {
+        setCopiedMessageIndex(msgIndex);
+        setTimeout(() => setCopiedMessageIndex(null), 2000);
+      })
+      .catch((err) => console.error('Failed to copy: ', err));
   };
-  
-  const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setIsDragging(true);
-  }, []);
-  
-  const handleDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setIsDragging(false);
-  }, []);
-  
-  const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setIsDragging(false);
-    const files = event.dataTransfer.files;
-    if (files && files.length > 0) {
-      handleImageAttach(files);
-    }
-  }, [handleImageAttach]);
-  
-  const handlePaste = useCallback(async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const items = event.clipboardData?.items;
-    if (items) {
-      const files: File[] = [];
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
-          const file = items[i].getAsFile();
-          if (file) files.push(file);
-        }
-      }
-      if (files.length > 0) {
-        event.preventDefault(); 
-        const dataTransfer = new DataTransfer();
-        files.forEach(file => dataTransfer.items.add(file));
-        await handleImageAttach(dataTransfer.files);
-      }
-    }
-  }, [handleImageAttach]);
-  
+
   if (!currentWorkspace) {
-    return <AppLayout><div>Loading workspace data or workspace not selected...</div></AppLayout>;
-  }
-  
-  if (!threadId && !selectedAgentForNewThread) {
     return (
       <AppLayout>
-      <div className="new-thread-agent-selection">
-      <h2>Select an Agent to Start a New Thread</h2>
-      {error && <p className="error-text">Error: {error}</p>}
-      {availableAgents.length === 0 && !isLoading && (
-        <p>No agents available. <Link to={`/workspace/${workspaceName}/agents`}>Create one?</Link></p>
-      )}
-      {isLoading && <p>Loading agents...</p>}
-      <div className="agent-list">
-      {availableAgents.map(agent => (
-        <button key={agent.id} onClick={() => handleAgentSelectionForNewThread(agent.id)} className="agent-select-button">
-        {agent.id} ({agent.model})
-        </button>
-      ))}
-      </div>
-      </div>
+        <div>Loading workspace data or workspace not selected...</div>
       </AppLayout>
     );
   }
-  
+  if (!workspaceName) {
+    return (
+      <AppLayout>
+        <div>Loading workspace name...</div>
+      </AppLayout>
+    );
+  }
+
+  if (!threadId && !selectedAgentForNewThread) {
+    return (
+      <AppLayout>
+        <div className="new-thread-agent-selection">
+          <h2>Select an Agent to Start a New Thread</h2>
+          {error && <p className="error-message">Error: {error}</p>}
+          {availableAgents.length === 0 && !isLoading && (
+            <p>
+              No agents available.{' '}
+              <Link to={`/workspace/${workspaceName}/agents`}>Create one?</Link>
+            </p>
+          )}
+          {isLoading && <p>Loading agents...</p>}
+          <div className="agent-list">
+            {availableAgents.map((agent) => (
+              <button
+                key={agent.id}
+                onClick={() => handleAgentSelectionForNewThread(agent.id)}
+                className="agent-select-button"
+              >
+                {agent.id} ({agent.model})
+              </button>
+            ))}
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
   const showChatInterface = threadId || selectedAgentForNewThread;
-  
-  const processedMessages = messages.filter(msg => {
-    if (msg.role === MessageRole.User && msg.content.length > 0 && msg.content.every(block => block.type === 'tool_result')) {
-      return false; 
+
+  const processedMessages = messages.filter((msg) => {
+    if (
+      msg.role === MessageRole.User &&
+      msg.content.length > 0 &&
+      msg.content.every((block) => block.type === 'tool_result')
+    ) {
+      return false;
     }
-    if (msg.content.length > 0 && msg.content.every(block => block.meta && block.meta.hidden === true)) {
+    if (
+      msg.content.length > 0 &&
+      msg.content.every((block) => block.meta && block.meta.hidden === true)
+    ) {
       return false;
     }
     return true;
   });
-  
+
   return (
     <AppLayout>
-    <div className="chat-view-container">
-    {isLoading && !processedMessages.length && <div className="loading-chat">Loading messages...</div>}
-    {isLoadingFiles && <div className="loading-chat">Loading workspace files...</div>}
-    {error && <div className="error-message">Error: {error}</div>}
-    
-    <div className="messages-area" ref={chatContainerRef} onScroll={handleScroll}>
-    {processedMessages.map((msg, msgIndex) => {
-      const originalMsgIndex = messages.findIndex(originalMsg => originalMsg === msg); 
-      const visibleContent = msg.content.filter(block => !(block.meta && block.meta.hidden === true));
-      if (visibleContent.length === 0 && msg.role !== MessageRole.System) return null; 
-      
-      return (
-        <div key={originalMsgIndex} className={`message-bubble ${msg.role}`}>
-        <div className="message-header">
-        <span className="role">{msg.role.toUpperCase()}</span>
-        <button onClick={() => handleCopyMessage(msg, originalMsgIndex)} className="copy-button">
-        {copiedMessageIndex === originalMsgIndex ? 'Copied!' : 'Copy'}
-        </button>
-        </div>
-        <div className="message-content">
-        {visibleContent.map((block, index) => {
-          if (block.type === 'tool_use') {
-            const toolUse = block as ToolUseBlock;
-            let toolResult: ToolResultBlock | undefined = undefined;
-            const resultInSameMessage = msg.content.find(
-              b => b.type === 'tool_result' && (b as ToolResultBlock).tool_use_id === toolUse.id
-            ) as ToolResultBlock | undefined;
-            if (resultInSameMessage && !(resultInSameMessage.meta && resultInSameMessage.meta.hidden)) {
-              toolResult = resultInSameMessage;
-            } else {
-              const nextOriginalMessage = messages[originalMsgIndex + 1];
-              if (nextOriginalMessage && nextOriginalMessage.role === MessageRole.User && 
-                nextOriginalMessage.content.every(c => c.type === 'tool_result')) {
-                  toolResult = nextOriginalMessage.content.find(
-                    b => (b as ToolResultBlock).tool_use_id === toolUse.id && !(b.meta && b.meta.hidden)
-                  ) as ToolResultBlock | undefined;
-                }
+      <div className="chat-view-container">
+        {isLoading && !processedMessages.length && !threadId && (
+          <div className="loading-chat">Preparing new chat...</div>
+        )}
+        {isLoading && !!threadId && !processedMessages.length && (
+            <div className="loading-chat">Loading messages...</div>
+        )}
+        {isLoadingFiles && <div className="loading-chat">Loading workspace files...</div>}
+        {error && <div className="error-message">Error: {error}</div>}
+
+        <div className="messages-area" ref={chatContainerRef} onScroll={handleScroll}>
+          {processedMessages.map((msg, processedMsgIndex) => {
+            const idToFind = msg.id;
+            let originalMsgRef: ApiChatMessage | undefined = undefined;
+            const originalMsgIndex = messages.findIndex((originalMsg, idx) => {
+              const idMatch = idToFind !== undefined && idToFind !== null && originalMsg.id === idToFind;
+              const refMatch = originalMsg === msg; // Check by reference if IDs are not reliable
+              if (idMatch || refMatch) {
+                originalMsgRef = originalMsg;
+                return true;
               }
-              return (
-                <div key={index} className="tool-cycle-block">
-                <RenderContentBlock block={toolUse} index={index} allBlocks={visibleContent} messages={messages} workspaceName={workspaceName}/>
-                {toolResult && <RenderContentBlock block={toolResult} index={-1} allBlocks={[]} messages={messages} workspaceName={workspaceName} />}
-                </div>
-              );
+              return false;
+            });
+
+            console.log(
+              `[MainView.map] ProcessedMsg (idx ${processedMsgIndex}, role ${msg.role}, id ${idToFind || 'N/A'}, content: ${msg.content.length} items) -> ` +
+              `originalMsgIndex: ${originalMsgIndex}, originalMsg.id: ${originalMsgRef?.id || 'N/A'}`
+            );
+
+            if (originalMsgIndex === -1) {
+              console.warn('[MainView.map] Could not find original message for processed message:', JSON.parse(JSON.stringify(msg)));
+              // Decide how to handle this: skip rendering, or render with a default index?
+              // For now, skipping to avoid passing -1 as originalMsgIndex which would break array lookups.
+              return null; 
             }
-            if (block.type === 'tool_result') { 
-              let wasHandled = false; 
-              for(let i = 0; i < index; i++) {
-                const prevBlock = visibleContent[i] as ContentBlock; 
-                if(prevBlock.type === 'tool_use' && (prevBlock as ToolUseBlock).id === (block as ToolResultBlock).tool_use_id) {
-                  wasHandled = true;
-                  break;
-                }
-              }
-              if (!wasHandled && originalMsgIndex > 0) {
-                const prevOriginalMessage = messages[originalMsgIndex - 1];
-                if (prevOriginalMessage.role === MessageRole.Assistant && 
-                  prevOriginalMessage.content.some(b => b.type === 'tool_use' && (b as ToolUseBlock).id === (block as ToolResultBlock).tool_use_id && !(b.meta && b.meta.hidden))) {
-                    wasHandled = true;
-                  }
-                }
-                if(wasHandled) return null;
-              }
-              return <RenderContentBlock block={block} index={index} allBlocks={visibleContent} messages={messages} workspaceName={workspaceName} />;
-            })}
-            </div>
-            </div>
-          )})}
+
+            return (
+              <MessageBubble
+                key={idToFind || `msg-${processedMsgIndex}-${originalMsgIndex}`} // Improved key for robustness
+                msg={msg} // Pass the message from processedMessages
+                originalMsgIndex={originalMsgIndex} // Crucial: the index in the *original* messages array
+                allMessages={messages} // Pass the full, unfiltered messages array for context
+                workspaceName={workspaceName}
+                copiedMessageIndex={copiedMessageIndex}
+                onCopyMessage={handleCopyMessage}
+              />
+            );
+          })}
           <div ref={messagesEndRef} />
-          </div>
-          
-          {isScrolledUp && (
-            <div className="scroll-buttons">
-            <button onClick={() => chatContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}>Scroll to Top</button>
-            <button onClick={scrollToBottom}>Scroll to Bottom</button>
-            </div>
-          )}
-          
-          {showChatInterface && (
-            <div 
-            className={`message-input-container ${isDragging ? 'dragging-over' : ''}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
+        </div>
+
+        {isScrolledUp && (
+          <div className="scroll-buttons">
+            <button
+              onClick={() =>
+                chatContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+              }
             >
-            {attachedImages.length > 0 && (
-              <div className="image-previews-container">
-              {attachedImages.map((image, index) => (
-                <div key={image.id} className="image-preview-item">
-                <img src={`data:${image.media_type};base64,${image.base64}`} alt={`preview ${index}`} />
-                <button onClick={() => handleRemoveImage(image.id)} className="remove-image-btn">×</button>
-                </div>
-              ))}
-              </div>
-            )}
-            <div className="message-input-area">
-            <FileMentionInput
-            value={newMessage}
-            onChange={setNewMessage}
-            onMentionedFilesChange={setMentionedFilePaths}
-            availableFiles={workspaceFiles}
-            textareaRef={textareaRef}
-            onSend={handleSendMessage} 
-            />
-            <input 
-            type="file"
-            multiple 
-            accept="image/png, image/jpeg, image/gif, image/webp"
-            ref={fileInputRef} 
-            style={{ display: 'none' }} 
-            onChange={(e) => handleImageAttach(e.target.files)}
-            />
-            <button onClick={handleSendMessage} disabled={isLoading || isLoadingFiles || (!newMessage.trim() && attachedImages.length === 0) || (!threadId && !selectedAgentForNewThread)}>
-            {isLoading ? 'Sending...' : 'Send'}
+              Scroll to Top
             </button>
-            </div>
-            </div>
-          )}
+            <button onClick={scrollToBottom}>Scroll to Bottom</button>
           </div>
-          </AppLayout>
-        );
-      };
-      
-      export default MainView;
+        )}
+
+        {showChatInterface && (
+          <MessageInputArea 
+            newMessage={newMessage}
+            setNewMessage={setNewMessage}
+            attachedImages={attachedImages}
+            setAttachedImages={setAttachedImages}
+            mentionedFilePaths={mentionedFilePaths}
+            setMentionedFilePaths={setMentionedFilePaths}
+            workspaceFiles={workspaceFiles}
+            isLoading={isLoading}
+            isLoadingFiles={isLoadingFiles}
+            threadId={threadId}
+            selectedAgentForNewThread={selectedAgentForNewThread}
+            onSendMessage={handleSendMessage}
+            isDragging={isDragging}
+            setIsDragging={setIsDragging}
+          />
+        )}
+      </div>
+    </AppLayout>
+  );
+};
+
+export default MainView;

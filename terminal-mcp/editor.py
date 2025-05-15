@@ -290,16 +290,20 @@ def response_with_filediff(existing_content: str, new_content: str, response: st
     for line in diff:
         if line.startswith('+'):
             # Darker green background for additions
-            diff_html += f'<div style="background-color: #0f5323">{line}</div>'
+            escaped_line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            diff_html += f'<div style="background-color: #0f5323">{escaped_line}</div>'
         elif line.startswith('-'):
             # Darker red background for deletions  
-            diff_html += f'<div style="background-color: #5c1e1e">{line}</div>'
+            escaped_line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            diff_html += f'<div style="background-color: #5c1e1e">{escaped_line}</div>'
         elif line.startswith('@@'):
             # Darker blue/gray background for diff headers
-            diff_html += f'<div style="background-color: #1f364d">{line}</div>'
+            escaped_line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            diff_html += f'<div style="background-color: #1f364d">{escaped_line}</div>'
         else:
             # No background for context lines
-            diff_html += f'<div>{line}</div>'
+            escaped_line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            diff_html += f'<div>{escaped_line}</div>'
     diff_html += '</div>'
     return TextContent(
         text=response,

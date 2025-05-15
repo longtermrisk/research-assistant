@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { FileSystemItem } from '../../../types';
+import { FileSystemItem } from '../../types';
 import styles from './FileMentionInput.module.css';
 
 interface FileMentionInputProps {
@@ -9,6 +9,7 @@ interface FileMentionInputProps {
   availableFiles: FileSystemItem[];
   textareaRef?: React.RefObject<HTMLTextAreaElement>;
   onSend?: () => void;
+  onPaste?: (event: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 }
 
 interface DisplayItem extends FileSystemItem {
@@ -36,6 +37,7 @@ const FileMentionInput: React.FC<FileMentionInputProps> = ({
   availableFiles,
   textareaRef: externalTextareaRef,
   onSend,
+  onPaste
 }) => {
   const [showPopup, setShowPopup] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -84,8 +86,42 @@ const FileMentionInput: React.FC<FileMentionInputProps> = ({
     (items: FileSystemItem[], currentSearchTerm: string, currentOpenFolders: Set<string>, level = 0): DisplayItem[] => {
       let result: DisplayItem[] = [];
       const lowerSearchTerm = currentSearchTerm.toLowerCase();
+      
+      // Ensure folders in path are opened automatically
+      const ensureFoldersOpenForPath = (searchPath: string) => {
+        if (!searchPath.includes('/')) return;
+        
+        // Find and open all parent folders in the path
+        const findAndOpenFolders = (pathParts: string[], currentItems: FileSystemItem[], currentPath = '') => {
+          if (pathParts.length === 0) return;
+          
+          const currentFolder = pathParts[0];
+          const nextPath = currentPath ? `${currentPath}/${currentFolder}` : currentFolder;
+          
+          for (const item of currentItems) {
+            if (item.type === 'folder' && (item.name === currentFolder || item.path === nextPath)) {
+              currentOpenFolders.add(item.id);
+              if (item.children && pathParts.length > 1) {
+                findAndOpenFolders(pathParts.slice(1), item.children, nextPath);
+              }
+              break;
+            }
+          }
+        };
+        
+        const pathParts = searchPath.split('/');
+        findAndOpenFolders(pathParts, items);
+      };
+      
+      // If search term contains slashes, automatically open relevant folders
+      if (lowerSearchTerm.includes('/')) {
+        ensureFoldersOpenForPath(lowerSearchTerm);
+      }
+      
       for (const item of items) {
-        const matchesSearch = item.name.toLowerCase().includes(lowerSearchTerm) || item.path.toLowerCase().includes(lowerSearchTerm);
+        const matchesSearch = item.name.toLowerCase().includes(lowerSearchTerm) || 
+                             item.path.toLowerCase().includes(lowerSearchTerm);
+        
         if (item.type === 'folder') {
           if (matchesSearch || currentOpenFolders.has(item.id) || !currentSearchTerm.trim()) {
             result.push({ ...item, level });
@@ -123,17 +159,22 @@ const FileMentionInput: React.FC<FileMentionInputProps> = ({
     let atIndex = -1;
     for (let i = cursorPos - 1; i >= 0; i--) {
       if (text[i] === '@') {
-        if (i === 0 || /\s/.test(text[i - 1]) || ['(', '['].includes(text[i-1])) {
+        if (i === 0 || /\s/.test(text[i - 1]) || ['(', '['].includes(text[i - 1])) {
           atIndex = i;
           break;
         }
       }
-      if (/\s/.test(text[i]) && i < cursorPos -1) break;
+      // Only break on whitespace if we're not in the middle of a path
+      // Allow continuing to search backward if we're in a path segment
+      if (/\s/.test(text[i]) && text.substring(i + 1, cursorPos).indexOf('/') === -1) {
+        break;
+      }
     }
 
     if (atIndex !== -1) {
       const currentMention = text.substring(atIndex + 1, cursorPos);
-      if (/^[a-zA-Z0-9/._-]*$/.test(currentMention)) {
+      // Ensure the regex allows for path separators and common file name characters
+      if (/^[a-zA-Z0-9/._\-\s]*$/.test(currentMention)) {
         setSearchTerm(currentMention);
         setShowPopup(true);
         setMentionStartIndex(atIndex);
@@ -148,7 +189,7 @@ const FileMentionInput: React.FC<FileMentionInputProps> = ({
   const closePopup = useCallback(() => {
     setShowPopup(false);
     // Keep activeIndex and searchTerm for potential quick reopen, reset mentionStartIndex
-    setMentionStartIndex(null); 
+    setMentionStartIndex(null);
   }, []);
 
   const toggleFolderExpansion = (folderId: string, e?: React.MouseEvent) => {
@@ -166,19 +207,19 @@ const FileMentionInput: React.FC<FileMentionInputProps> = ({
       const textBefore = value.substring(0, mentionStartIndex);
       const currentCursorPos = textareaRef.current?.selectionStart || value.length;
       const textAfter = value.substring(currentCursorPos);
-      
+
       const newText = `${textBefore}@${textToInsert} ${textAfter}`;
       onChange(newText);
-      
+
       setTimeout(() => {
         const newCursorPos = (textBefore + "@" + textToInsert + " ").length;
         textareaRef.current?.focus();
         textareaRef.current?.setSelectionRange(newCursorPos, newCursorPos);
       }, 0);
     }
-    closePopup();
+    // closePopup();
   };
-  
+
   const handleCheckboxChange = (item: DisplayItem, e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();
     const newSelectedPaths = new Set(selectedFilePaths);
@@ -222,13 +263,17 @@ const FileMentionInput: React.FC<FileMentionInputProps> = ({
       e.preventDefault();
       onSend();
     } else if (e.key === ' ' && showPopup && mentionStartIndex !== null) {
-        // If space is typed while popup is open, commit the current search term as a literal mention
-        const currentMentionText = value.substring(mentionStartIndex + 1, textareaRef.current?.selectionStart);
-        if (currentMentionText.trim()) {
-             // No specific item selected from list, so just close popup.
-             // The text already typed (@searchterm) remains.
-        }
-        closePopup(); // Close popup on space
+      // Check if we're in the middle of a path
+      const currentMentionText = value.substring(mentionStartIndex + 1, textareaRef.current?.selectionStart);
+      if (currentMentionText.includes('/') && !currentMentionText.endsWith('/')) {
+        // If we're in the middle of a path, don't close the popup on space
+        e.preventDefault();
+        const newText = value.substring(0, textareaRef.current?.selectionStart || 0) + ' ' + 
+                       value.substring(textareaRef.current?.selectionStart || 0);
+        onChange(newText);
+      } else {
+        closePopup(); // Close popup on space if not in a path
+      }
     }
   };
 
@@ -266,7 +311,7 @@ const FileMentionInput: React.FC<FileMentionInputProps> = ({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (popupRef.current && !popupRef.current.contains(event.target as Node) &&
-          textareaRef.current && !textareaRef.current.contains(event.target as Node)) {
+        textareaRef.current && !textareaRef.current.contains(event.target as Node)) {
         closePopup();
       }
     };
@@ -281,6 +326,12 @@ const FileMentionInput: React.FC<FileMentionInputProps> = ({
       textareaRef.current.style.height = `${Math.max(scrollHeight, 40)}px`;
     }
   }, [value, textareaRef]);
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (onPaste) {
+      onPaste(e);
+    }
+  };
 
   return (
     <div className={styles.container}>
@@ -338,6 +389,7 @@ const FileMentionInput: React.FC<FileMentionInputProps> = ({
         value={value}
         onChange={handleTextChange}
         onKeyDown={handleKeyDownTextarea}
+        onPaste={handlePaste}
         className={styles.textarea}
         placeholder="Type your message, or @ to mention files..."
         rows={1}
