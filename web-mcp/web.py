@@ -5,10 +5,8 @@ import requests
 from markdownify import markdownify
 from typing import List, Dict, Optional
 import logging
-
 from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,6 +26,7 @@ def _format_search_results(results: List[Dict[str, str]]) -> str:
         formatted.append(f"# {title}\n{snippet}\n{link}")
     return "\n\n".join(formatted)
 
+
 def _markdown_browser(url: str) -> str:
     """Fetches a URL and converts its HTML content to markdown."""
     try:
@@ -42,14 +41,14 @@ def _markdown_browser(url: str) -> str:
         response.encoding = response.apparent_encoding # Guess encoding
         html_content = response.text
 
-        # Convert to markdown
-        # You might want to configure markdownify further (e.g., strip=['script', 'style'])
+        # markdown_content = markdownify(html_content, heading_style="ATX", strip=["script", "style", "a"])
         markdown_content = markdownify(html_content, heading_style="ATX")
         return markdown_content
     except requests.exceptions.RequestException as e:
         logger.error(f"Error fetching URL {url}: {e}")
         return f"Error fetching URL {url}: {str(e)}"
     except Exception as e:
+        
         logger.error(f"Error processing URL {url}: {e}")
         return f"Error processing URL {url}: {str(e)}"
 
@@ -123,7 +122,7 @@ async def google_search(query: str, expand: int = 3) -> str:
                 logger.info(f"Expanding result {i+1}: Fetching markdown for {url}")
                 markdown_text = _markdown_browser(url)
                 # Add separator and source info
-                expanded_content.append(f"\n\n" + "-"*50 + f"\n\nSource {i+1}: {url}\n\n{markdown_text}")
+                expanded_content.append(f"\n\n" + f"<source url='{url}'>\n" + markdown_text + "\n</source>")
             else:
                  logger.warning(f"Skipping expansion for result {i+1} due to missing URL.")
 
@@ -144,6 +143,18 @@ async def markdown_browser(url: str) -> str:
     logger.info(f"Fetching markdown for URL: {url}")
     # Reuse the internal helper function
     return _markdown_browser(url)
+
+
+
+async def debug():
+    url = input("Enter URL: ")
+    result = await markdown_browser(url)
+    with open('page.md', 'w', encoding='utf-8') as f:
+        f.write(result)
+
+# if __name__ == "__main__":
+#     import asyncio
+#     asyncio.run(debug())
 
 
 # --- Run the Server ---

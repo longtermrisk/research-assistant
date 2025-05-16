@@ -17,7 +17,7 @@ import pandas as pd
 import openai
 import yaml
 from openweights import OpenWeights
-from viseval import VisEval, FreeformQuestion, FreeformEval
+from vibes_eval import VisEval, FreeformQuestion, FreeformEval
 
 # Create an MCP server
 mcp = FastMCP("Talk-to-Model")

@@ -32,6 +32,12 @@ def setup_mcp_dot_json():
     - '/path/to/repo/' with the actual path to the repository
     - all env's with the actual envs or override by input
     """
+    if os.path.exists(os.path.expanduser('~/mcp.json')):
+        with open(os.path.expanduser('~/mcp.json'), 'r') as f:
+            existing_mcp_json = json.load(f)
+    else:
+        existing_mcp_json = {}
+
     with open(os.path.join(os.path.dirname(__file__), 'mcp.json'), 'r') as f:
         mcp_json = f.read()
     
@@ -44,16 +50,34 @@ def setup_mcp_dot_json():
     mcp_json = mcp_json.replace('/path/to/repo', repo_path)
 
     mcp_data = json.loads(mcp_json)
+    confirmed_env = {}
     for name, config in mcp_data['mcpServers'].items():
         print(f"Setting up {name}...")
         if 'env' in config:
             env = config['env']
+            existing_env = {}
+            if name in existing_mcp_json['mcpServers']:
+                existing_env = existing_mcp_json['mcpServers'][name].get('env', {})
+                for key, value in existing_env.items():
+                    if key in env:
+                        env[key] = value
             for key, value in env.items():
-                default = os.environ.get(key)
-                value = input(f"Please enter the value for {key} (default: {default}): ")
-                if not value:
-                    value = default
+                if key in existing_env:
+                    value = existing_env[key]
+                    continue
+                if key in confirmed_env:
+                    value = confirmed_env[key]
+                else:
+                    default = os.environ.get(key)
+                    value = input(f"Please enter the value for {key} (default: {default}): ")
+                    if not value:
+                        value = default
+                    confirmed_env[key] = value
                 env[key] = value
+    
+    for name, config in existing_mcp_json['mcpServers'].items():
+        if name not in mcp_data['mcpServers']:
+            mcp_data['mcpServers'][name] = config
     
     # Write the modified mcp.json to ~/mcp.json
     with open(os.path.expanduser('~/mcp.json'), 'w') as f:
@@ -157,8 +181,7 @@ def install_repo():
     Installs all components of the repo
     """
     ensure_uv()
-    if not os.path.exists(os.path.expanduser('~/mcp.json')):
-        setup_mcp_dot_json()
+    setup_mcp_dot_json()
     os.makedirs(os.path.expanduser('~/.automator/workspaces'), exist_ok=True)
     # cp prompts ~/.automator/prompts
     shutil.copytree(os.path.join(os.path.dirname(__file__), 'automator/prompts'), os.path.expanduser('~/.automator/prompts'), dirs_exist_ok=True)

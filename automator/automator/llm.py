@@ -174,20 +174,21 @@ if 'OPENAI_API_KEY' in os.environ:
     )
 
 
-# @backoff.on_exception(
-#     wait_gen=backoff.expo,
-#     exception=(
-#         openai.RateLimitError,
-#         openai.APIConnectionError,
-#         openai.APITimeoutError,
-#         openai.InternalServerError,
-#         anthropic.APIConnectionError,
-#         anthropic.RateLimitError,
-#         anthropic.APIStatusError,
-#     ),
-#     max_value=60,
-#     factor=1.5,
-# )
+@backoff.on_exception(
+    wait_gen=backoff.expo,
+    exception=(
+        openai.RateLimitError,
+        openai.APIConnectionError,
+        openai.APITimeoutError,
+        openai.InternalServerError,
+        anthropic.APIConnectionError,
+        anthropic.RateLimitError,
+        anthropic.APIStatusError,
+        TypeError
+    ),
+    max_value=60,
+    factor=1.5,
+)
 async def get_response(model, messages, **kwargs):
     all_models = []
     for provider in providers:

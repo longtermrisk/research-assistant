@@ -342,7 +342,6 @@ async def list_tools_api():
     ]
 
     tools_data: List[McpServerTools] = [] # Changed from dict to list
-
     for mcp_server in _SERVERS:
         thread = Thread(
             model="noop",

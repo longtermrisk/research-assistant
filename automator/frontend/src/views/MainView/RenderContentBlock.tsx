@@ -105,9 +105,12 @@ export const RenderContentBlock: React.FC<RenderContentBlockProps> = ({
       // Enhanced rendering for text content using ReactMarkdown with LaTeX support
       return (
         <div key={index} className="text-block">
-          <ReactMarkdown 
-            remarkPlugins={[remarkMath]} 
+          <ReactMarkdown
+            remarkPlugins={[remarkMath]}
             rehypePlugins={[rehypeKatex]}
+            components={{
+              img: () => null // Prevent image rendering
+            }}
           >
             {(block as TextBlock).text}
           </ReactMarkdown>
