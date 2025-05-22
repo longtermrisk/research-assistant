@@ -95,9 +95,18 @@ class Workspace:
             json.dump(self.env, f, ensure_ascii=False, indent=2)
             
         # Ensure the workspace directory exists
-        os.makedirs(self.env['CWD'], exist_ok=True)
+        self.root = self.env['CWD']
+        os.makedirs(self.root, exist_ok=True)
         # Ensure venv exists in the workspace directory
         _ensure_venv(Path(self.env['CWD']))
+    
+    @staticmethod
+    def list_workspaces() -> List[str]:
+        workspaces = []
+        for path in Path.home().glob(".automator/workspaces/*"):
+            if path.is_dir():
+                workspaces.append(path.name)
+        return workspaces
 
     @staticmethod
     def _resolve_workspace_dir(name: str) -> Path:

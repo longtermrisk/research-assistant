@@ -53,8 +53,8 @@ async def main() -> None:
         prompt_template_yaml="prompts/chatgpt.yaml",
         tools=["terminal.*"],
         env={},  # agent‑specific environment overrides (optional)
+        workspace=workspace
     )
-    bash_agent = workspace.add_agent(agent=bash_agent, id="bash")
     thread = None
 
     while (query := input("Query> ")) != 'exit':
@@ -70,14 +70,6 @@ if __name__ == "__main__":  # pragma: no cover – manual invocation only
 ```
 
 ## Workspaces
-```python
-from automator.workspace import Workspace
-
-workspace = Workspace('my-project/sub-project', env={"FOO": "override bar"})
-bash_agent = workspace.add_agent(agent=bash_agent, id='bash_agent')         # Return an agent because the workspace agent now has modified env
-workspace.add_thread(thread=thread, id='My first thread')
-```
-
 The workspace saves the agent and thread at exit. You can then load them via:
 ```python
 from automator.workspace import Workspace

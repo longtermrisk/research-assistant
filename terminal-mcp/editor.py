@@ -359,7 +359,7 @@ async def list_codebase_files(
                     for filename in filenames:
                          if filename.startswith('.'): continue # Skip hidden files
                          file_rel_path_to_repo = os.path.normpath(os.path.join(current_rel_root_to_repo, filename))
-                         if file_rel_path_to_repo not in ignored_repo_paths:
+                         if file_rel_path_to_repo not in ignored_repo_paths and not filename.endswith('.lock'):
                              # Store path relative to the original codebase_path request
                              file_rel_path_to_codebase = os.path.relpath(os.path.join(root, filename), full_codebase_path)
                              files.append(os.path.normpath(file_rel_path_to_codebase).replace(os.sep, '/'))
@@ -384,7 +384,7 @@ async def list_codebase_files(
                 # Exclude ignored and hidden dirs
                 dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ignored_dirs]
                 for filename in filenames:
-                    if not filename.startswith('.'): # Ignore hidden files
+                    if not filename.startswith('.') and not filename.endswith('.lock'): # Ignore hidden files
                         # File path relative to the requested codebase_path
                         rel_path = os.path.join(rel_root, filename) if rel_root != '.' else filename
                         files.append(os.path.normpath(rel_path).replace(os.sep, '/')) # Normalize and use forward slash
@@ -394,6 +394,7 @@ async def list_codebase_files(
             dirname, basename = os.path.split(f)
             is_readme = basename.lower().startswith('readme')
             return (dirname, not is_readme, basename)
+        
 
         files.sort(key=sort_key)
         return files # Return the list of relative paths

@@ -94,6 +94,11 @@ class AsyncPexpectProcess:
             if remaining <= 0:
                 break
             chunk = await self._read_nonblocking(timeout=min(0.1, remaining))
+            
+            # While there is immediately available output, read it
+            while (more := await self._read_nonblocking(timeout=0.1)) != "":
+                chunk += more
+
             if chunk:
                 collected.append(chunk)
                 if PROMPT_REGEX.search(chunk):
@@ -239,3 +244,15 @@ async def _handle_terminal_output(
         f.write(response)
 
     return TextContent(text=response, annotations={'display_html': f"<pre>{response}</pre>"}, type="text")
+
+
+# # DEBUG
+# async def debug():
+#     cmd = "python generate_refusals.py"
+#     output = await terminal_execute(cmd, detach_after_seconds=5)
+#     breakpoint()
+
+
+# if __name__ == "__main__":
+#     os.chdir('/Users/nielswarncke/.automator/workspaces/planb/workspace')
+#     asyncio.run(debug())

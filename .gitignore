@@ -191,3 +191,4 @@ planb/
 
 *.logs
 automator/resources/
+.DS_Store

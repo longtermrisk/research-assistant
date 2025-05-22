@@ -84,6 +84,13 @@ class ImageBlock(BaseModel):
     def from_base64(data: str, media_type: str = "image/png", meta=None) -> "ImageBlock":
         return ImageBlock(source=Base64ImageSource(data=data, media_type=media_type, meta=meta))
     
+    @staticmethod
+    def from_file(file_path: str, media_type: str = "image/png", meta=None) -> "ImageBlock":
+        with open(file_path, "rb") as f:
+            data = f.read()
+        base64_data = base64.b64encode(data).decode("utf-8")
+        return ImageBlock(source=Base64ImageSource(data=base64_data, media_type=media_type, meta=meta))
+        
     def anthropic_format(self) -> Dict[str, Any]:
         return {
             "type": "image",

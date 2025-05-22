@@ -155,6 +155,7 @@ if 'OPENROUTER_API_KEY' in os.environ:
             get_response_factory(openai.AsyncOpenAI(api_key=os.environ['OPENROUTER_API_KEY'], base_url="https://openrouter.ai/api/v1")),
             models=[
                 'google/gemini-2.5-pro-preview',
+                'qwen/qwen3-235b-a22b'
             ],
         )
     )
@@ -165,7 +166,7 @@ if 'OPENROUTER_API_KEY' in os.environ:
 
 
 if 'OPENAI_API_KEY' in os.environ:
-    _available_openai_models = [m.id for m in openai.OpenAI().models.list().data]
+    _available_openai_models = [m.id for m in openai.OpenAI().models.list().data if m.id.startswith('gpt') or m.id.startswith('o')]
     providers.append(
         Provider(
             get_response_factory(openai.AsyncOpenAI()),
@@ -184,7 +185,8 @@ if 'OPENAI_API_KEY' in os.environ:
         anthropic.APIConnectionError,
         anthropic.RateLimitError,
         anthropic.APIStatusError,
-        TypeError
+        TypeError,
+        AssertionError
     ),
     max_value=60,
     factor=1.5,
@@ -194,7 +196,9 @@ async def get_response(model, messages, **kwargs):
     for provider in providers:
         if model in provider.models:
             all_models.append(model)
-            return await provider.get_response(model=model, messages=messages, **kwargs)
+            response = await provider.get_response(model=model, messages=messages, **kwargs)
+            assert len(response.content) > 0, "Response is empty"
+            return response
     raise ValueError(f"Model '{model}' not supported by any provider. Supported models: {all_models}")
         
     

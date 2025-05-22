@@ -44,6 +44,7 @@ class Agent:
         workspace: Optional[str] = None, # Workspace to register the agent in
         id: Optional[str] = None, # ID of the agent in the workspace
         prompt_template_vars: Optional[Dict[str, Any]] = None, # Default values to use in prompt_template.apply()
+        hooks: Optional[List[str]] = None, # List of hooks to use
     ):
         self.model = model
         self.prompt_template_yaml = prompt_template_yaml
@@ -60,6 +61,7 @@ class Agent:
         self.workspace = workspace
         self.id = id
         self.prompt_template_vars = prompt_template_vars or {}
+        self.hooks = hooks or []
         if workspace:
             id = id or f'{self.prompt_template_yaml.split("/")[-1].split(".")[0]}'
             workspace.register_agent(agent=self, id=id)
@@ -98,7 +100,8 @@ class Agent:
             temperature=temperature, 
             max_tokens=max_tokens, 
             workspace=self.workspace, 
-            id=thread_id
+            id=thread_id,
+            hooks=self.hooks
         )
         await thread.prepare()
         return thread
@@ -115,6 +118,7 @@ class Agent:
             "subagents": self.subagents,
             "as_tool": as_tool_for_json,
             "prompt_template_vars": self.prompt_template_vars,
+            "hooks": self.hooks,
         }
 
 class McpServerTool:
@@ -193,7 +197,7 @@ class SubagentToolCall:
 class Thread:
     def __init__(self, model: str, messages: List[ChatMessage], tools: list[str], env: dict[str, str],
                  subagents: Optional[List[str]] = None, temperature: float = 0.7, max_tokens: int = 4000,
-                 workspace: Optional['Workspace'] = None, id: Optional[str] = None):
+                 workspace: Optional['Workspace'] = None, id: Optional[str] = None, hooks: Optional[List[str]] = None):
         self.exit_stack = AsyncExitStack()
         self.server_sessions: Dict[str, ClientSession] = {}
         self.model = model
@@ -203,8 +207,11 @@ class Thread:
         self.max_tokens = max_tokens
         self.env = env
         self.subagents = subagents or []
-        self._threads: Dict[str, Thread] = {}; self.workspace = workspace; self.id = id or uuid4().hex
+        self._threads: Dict[str, Thread] = {}
+        self.workspace = workspace
+        self.id = id or uuid4().hex
         self.tools: List[McpServerTool | SubagentTool] = []; self._ready = False # type: ignore
+        self.hooks = hooks or []
         
     async def prepare(self):
         if self._ready: return
@@ -314,4 +321,4 @@ class Thread:
     def json(self):
         return {"model": self.model, "messages": [m.model_dump() for m in self.messages], "tools": self._tools,
                 "temperature": self.temperature, "max_tokens": self.max_tokens, "env": self.env,
-                "subagents": self.subagents, "thread_ids": list(self._threads.keys())}
+                "subagents": self.subagents, "thread_ids": list(self._threads.keys()), "hooks": self.hooks}
