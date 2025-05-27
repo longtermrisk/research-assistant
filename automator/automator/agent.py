@@ -1,4 +1,4 @@
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Union
 import asyncio
 from typing import Optional
 from contextlib import AsyncExitStack
@@ -8,6 +8,7 @@ import logging
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.client.sse import sse_client
 
 from dotenv import load_dotenv
 from automator.utils import load_json
@@ -25,12 +26,15 @@ from automator.dtypes import (
     MessageRole
 )
 from automator.llm import get_response
+from automator.hooks import load_hooks, _HOOKS
 
 logger = logging.getLogger("uvicorn")
 
 load_dotenv()
 
 _SERVERS = load_json('~/mcp.json').get('mcpServers', {})
+load_hooks()
+
 
 class Agent:
     def __init__(
@@ -212,6 +216,8 @@ class Thread:
         self.id = id or uuid4().hex
         self.tools: List[McpServerTool | SubagentTool] = []; self._ready = False # type: ignore
         self.hooks = hooks or []
+        self._interrupted = False
+        self.messages_after_hooks = []
         
     async def prepare(self):
         if self._ready: return
@@ -225,13 +231,45 @@ class Thread:
             if server_id not in self.server_sessions:
                 server_config = _SERVERS.get(server_id)
                 if server_config is None: raise ValueError(f"Server {server_id} not in MCP config.")
-                effective_env = {**(server_config.get('env', {})), **base_env}
-                params = StdioServerParameters(command=server_config['command'], args=server_config['args'], env=effective_env)
-                stdio, write = await self.exit_stack.enter_async_context(stdio_client(params))
-                mcp_session = await self.exit_stack.enter_async_context(ClientSession(stdio, write)); await mcp_session.initialize()
+                
+                # Determine transport type
+                transport = server_config.get('transport', 'stdio')  # Default to stdio for backward compatibility
+                
+                if transport == 'stdio':
+                    # Existing stdio implementation
+                    effective_env = {**(server_config.get('env', {})), **base_env}
+                    params = StdioServerParameters(command=server_config['command'], args=server_config['args'], env=effective_env)
+                    stdio, write = await self.exit_stack.enter_async_context(stdio_client(params))
+                    mcp_session = await self.exit_stack.enter_async_context(ClientSession(stdio, write))
+                elif transport == 'sse':
+                    # New SSE implementation
+                    url = server_config.get('url')
+                    if not url:
+                        raise ValueError(f"SSE transport requires 'url' in server config for {server_id}")
+                    
+                    headers = server_config.get('headers', {})
+                    # Add environment variables to headers if needed
+                    effective_headers = {**headers}
+                    # Some SSE servers might expect auth tokens in headers
+                    for key, value in {**(server_config.get('env', {})), **base_env}.items():
+                        if key.upper().endswith('_TOKEN') or key.upper().endswith('_KEY'):
+                            effective_headers[f'X-{key.replace("_", "-")}'] = value
+                    
+                    timeout = server_config.get('timeout', 5)
+                    sse_read_timeout = server_config.get('sse_read_timeout', 300)
+                    
+                    read, write = await self.exit_stack.enter_async_context(
+                        sse_client(url, headers=effective_headers, timeout=timeout, sse_read_timeout=sse_read_timeout)
+                    )
+                    mcp_session = await self.exit_stack.enter_async_context(ClientSession(read, write))
+                else:
+                    raise ValueError(f"Unknown transport type '{transport}' for server {server_id}")
+                
+                await mcp_session.initialize()
                 self.server_sessions[server_id] = mcp_session
             else:
                 mcp_session = self.server_sessions[server_id]
+            
             resp = await mcp_session.list_tools()
             for t_def in resp.tools:
                 if t_def.name == tool_name_filter or tool_name_filter == "*":
@@ -250,24 +288,56 @@ class Thread:
         for sub_thread_instance in self._threads.values(): await sub_thread_instance.cleanup()
         await self.exit_stack.aclose()
     
+    async def _add_message(self, message):
+        """Add messages, apply hooks, save if needed"""
+        self.messages.append(message)
+        await self.apply_hooks()
+        if self.workspace:
+            self.workspace.add_thread(thread=self, id=self.id)
+        return message
+
+    async def apply_hooks(self):
+        self.messages_after_hooks = self.messages.copy()
+        for hook_name in self.hooks:
+            hook = _HOOKS.get(hook_name)
+            await hook(self)
+        # Remove any tool use messages when the tool result is not present
+        messages = []
+        for previous, current in zip(self.messages_after_hooks[:-1], self.messages_after_hooks[1:]):
+            missing_response = False
+            if previous.role == 'assistant':
+                for block in previous.content:
+                    if isinstance(block, ToolUseBlock):
+                        if not any(isinstance(b, ToolResultBlock) and b.tool_use_id == block.id for b in current.content):
+                            missing_response = True
+                            break
+            if not missing_response:
+                messages.append(previous)
+        messages.append(self.messages_after_hooks[-1])  # Always keep the last message
+        self.messages_after_hooks = messages
+
     async def __aiter__(self):
         if not self._ready:
             await self.prepare()
-        while True:
-            llm_response_message = await get_response(model=self.model, messages=self.messages, tools=[t for t in self.tools if hasattr(t, 'definition')], temperature=self.temperature, max_tokens=self.max_tokens)
-            self.messages.append(llm_response_message); yield llm_response_message
-            if self.workspace:
-                self.workspace.add_thread(thread=self, id=self.id)
+        self._interrupted = False
+        await self.apply_hooks()
+        while not self._interrupted:
+            llm_response_message = await get_response(
+                model=self.model,
+                messages=self.messages_after_hooks,
+                tools=[t for t in self.tools if hasattr(t, 'definition')],
+                temperature=self.temperature,
+                max_tokens=self.max_tokens
+            )
+            yield await self._add_message(llm_response_message); await asyncio.sleep(0.1)
             tool_results_message, done = await self.process_message(llm_response_message)
             if done:
                 break
-            self.messages.append(tool_results_message); yield tool_results_message
-            if self.workspace:
-                self.workspace.add_thread(thread=self, id=self.id)
+            yield await self._add_message(tool_results_message); await asyncio.sleep(0.1)
     
     async def process_message(self, msg_w_tool_uses: ChatMessage) -> Tuple[ChatMessage, bool]:
         tool_use_blocks = [b for b in msg_w_tool_uses.content if isinstance(b, ToolUseBlock)]
-        if not tool_use_blocks: return ChatMessage(role=MessageRole.user, content=[]), True
+        if not tool_use_blocks or self._interrupted: return ChatMessage(role=MessageRole.user, content=[]), True
         prepared_calls = []
         for blk in tool_use_blocks:
             tool_runner = next((t for t in self.tools if t.name == blk.name), None)
@@ -288,6 +358,9 @@ class Thread:
             raise ValueError(f"Tool {tool_name_str} not found for thread '{self.id}'.")
         tool_call_obj = await tool_runner_inst.prepare(ToolUseBlock(id=uuid4().hex, name=tool_name_str, input=input_data_dict))
         tool_result_obj = await tool_call_obj.call(); return tool_result_obj.content
+    
+    def interrupt(self):
+        self._interrupted = True
     
     async def run(self, query: Optional[str] = None, user_content: Optional[List[ContentBlock]] = None):
         if not self._ready:

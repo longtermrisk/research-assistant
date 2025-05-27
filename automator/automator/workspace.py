@@ -62,7 +62,7 @@ def _ensure_venv(path: Path) -> None:
     if not venv_path.exists():
         subprocess.run(["uv", "venv"], check=True, cwd=path)
     # subprocess.run(["uv", "add", "ipykernel", "pip", "ipython", "jupyterlab", "plotly", "matplotlib"], check=True, cwd=path)
-    subprocess.run(["uv", "add", "ipykernel", "pip", "ipython", "jupyterlab"], check=True, cwd=path)
+    subprocess.run(["uv", "add", "ipykernel", "pip", "ipython", "jupyterlab", "pandas", "matplotlib"], check=True, cwd=path)
 
 class Workspace:
     def __init__(self, name: str, env: Optional[Dict[str, str]] = None):

@@ -38,7 +38,6 @@ async def get_response_anthropic(messages, tools, **kwargs):
             blocks.append(ToolUseBlock(id=item.id, name=item.name, input=item.input))
         else:
             raise ValueError(f"Unknown block type: {item.type}")
-
     return ChatMessage(role=MessageRole.assistant, content=blocks)
 
 # ---------------------------------------------------------------------------
@@ -190,6 +189,7 @@ if 'OPENAI_API_KEY' in os.environ:
     ),
     max_value=60,
     factor=1.5,
+    on_backoff=lambda details: print(f"Retrying... {details['exception']}")
 )
 async def get_response(model, messages, **kwargs):
     all_models = []
@@ -197,7 +197,12 @@ async def get_response(model, messages, **kwargs):
         if model in provider.models:
             all_models.append(model)
             response = await provider.get_response(model=model, messages=messages, **kwargs)
-            assert len(response.content) > 0, "Response is empty"
+            if len(response.content) == 0:
+                messages = messages + [
+                    ChatMessage(role=MessageRole.user, content=[TextBlock(text="Please continue.")])
+                ]
+                response = await provider.get_response(model=model, messages=messages, **kwargs)
+            assert len(response.content) > 0, "Response content is empty"
             return response
     raise ValueError(f"Model '{model}' not supported by any provider. Supported models: {all_models}")
         
