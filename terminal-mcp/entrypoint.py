@@ -3,9 +3,20 @@ import os
 
 from dotenv import load_dotenv
 import subprocess
+from pathlib import Path
 
 from server import mcp
 
+
+def _ensure_venv(path: Path) -> None:
+    pyproject_path = path / "pyproject.toml"
+    if not pyproject_path.exists():
+        subprocess.run(["uv", "init"], check=True, cwd=path)
+    venv_path = path / ".venv"
+    if not venv_path.exists():
+        subprocess.run(["uv", "venv"], check=True, cwd=path)
+    # subprocess.run(["uv", "add", "ipykernel", "pip", "ipython", "jupyterlab", "plotly", "matplotlib"], check=True, cwd=path)
+    subprocess.run(["uv", "add", "ipykernel", "pip", "ipython", "jupyterlab", "pandas", "matplotlib"], check=True, cwd=path)
 
 
 def activate_venv():
@@ -30,6 +41,7 @@ if __name__ == "__main__":
     CWD = os.environ.get("CWD", os.getcwd())
     os.chdir(CWD)
     load_dotenv(os.path.join(CWD, ".env"))
+    _ensure_venv(Path(CWD))
     activate_venv()
     from terminal import sessions, AsyncPexpectProcess
     from jupyter import jupyter # noqa: F401 – imported for side effects

@@ -198,6 +198,17 @@ class SubagentToolCall:
         response_content: List[ContentBlock] = final_message_content + [TextBlock(text=f"(Subagent: {self.name}, Thread ID: {self.thread.id})")]
         return ToolResultBlock(tool_use_id=self.tool_use_block.id, content=response_content, meta={"thread_id": self.thread.id, "message_start": initial_messages_len, "message_end": len(self.thread.messages)})
 
+def maybe_handle_docker_command(command: str, args: List[str], env: Dict[str, str]) -> Tuple[str, List[str]]:
+    if not command.startswith('docker'):
+        return command, args
+    # Replace $CWD in args with workspace cwd
+    args = [arg.replace('$CWD', env['CWD']) for arg in args]
+    # Inject envs to docker command
+    for var_name, var_value in env.items():
+        if var_name == "CWD": continue
+        args.append(f"--env {var_name}={var_value}")
+    return command, args
+
 class Thread:
     def __init__(self, model: str, messages: List[ChatMessage], tools: list[str], env: dict[str, str],
                  subagents: Optional[List[str]] = None, temperature: float = 0.7, max_tokens: int = 4000,
@@ -229,6 +240,7 @@ class Thread:
         for tool_id_spec in tool_specs:
             server_id, tool_name_filter = tool_id_spec.split(".", 1)
             if server_id not in self.server_sessions:
+                print(f"Connecting to server {server_id}")
                 server_config = _SERVERS.get(server_id)
                 if server_config is None: raise ValueError(f"Server {server_id} not in MCP config.")
                 
@@ -238,7 +250,8 @@ class Thread:
                 if transport == 'stdio':
                     # Existing stdio implementation
                     effective_env = {**(server_config.get('env', {})), **base_env}
-                    params = StdioServerParameters(command=server_config['command'], args=server_config['args'], env=effective_env)
+                    command, args = maybe_handle_docker_command(server_config['command'], server_config['args'], effective_env)
+                    params = StdioServerParameters(command=command, args=args, env=effective_env)
                     stdio, write = await self.exit_stack.enter_async_context(stdio_client(params))
                     mcp_session = await self.exit_stack.enter_async_context(ClientSession(stdio, write))
                 elif transport == 'sse':

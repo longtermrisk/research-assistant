@@ -15,6 +15,25 @@
                 "ANTHROPIC_API_KEY": "..."
             }
         },
+        "terminal-sandboxed": {
+            "command": "docker",
+            "args": [
+                "run",
+                "--rm",
+                "-i",
+                "-v",
+                "$CWD:/workspace",
+                "-w",
+                "/workspace",
+                "nielsrolf/terminal-mcp:latest"
+            ],
+            "env": {
+                "OPENAI_API_KEY": "...",
+                "HF_TOKEN": "...",
+                "OPENWEIGHTS_API_KEY": "...",
+                "ANTHROPIC_API_KEY": "..."
+            }
+        },
         "web": {
             "command": "/path/to/uv",
             "args": [

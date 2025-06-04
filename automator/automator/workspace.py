@@ -54,17 +54,6 @@ def _slugify(name: str) -> str:
     allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
     return "".join(c if c in allowed else "-" for c in name).strip("-_.")
 
-def _ensure_venv(path: Path) -> None:
-    pyproject_path = path / "pyproject.toml"
-    if not pyproject_path.exists():
-        subprocess.run(["uv", "init"], check=True, cwd=path)
-    venv_path = path / ".venv"
-    if not venv_path.exists():
-        subprocess.run(["uv", "venv"], check=True, cwd=path)
-    # subprocess.run(["uv", "add", "ipykernel", "pip", "ipython", "jupyterlab", "plotly", "matplotlib"], check=True, cwd=path)
-    subprocess.run(["uv", "add", "ipykernel", "pip", "ipython", "jupyterlab", "pandas", "matplotlib"], check=True, cwd=path)
-
-
 class Workspace:
     def __init__(self, name: str, env: Optional[Dict[str, str]] = None):
         self.name = name # Store the original name
@@ -98,8 +87,6 @@ class Workspace:
         # Ensure the workspace directory exists
         self.root = Path(self.env['CWD'])
         os.makedirs(self.root, exist_ok=True)
-        # Ensure venv exists in the workspace directory
-        _ensure_venv(self.root)
     
     @staticmethod
     def list_workspaces() -> List[str]:

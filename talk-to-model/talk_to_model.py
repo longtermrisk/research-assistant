@@ -330,9 +330,7 @@ async def debug():
 
 
 if __name__ == "__main__":
-    CWD = os.environ.get("CWD", os.getcwd())
-    CWD = os.environ.get("CWD", '../research-assistant')
-    os.chdir(CWD)
+    os.chdir(os.environ.get("CWD", os.getcwd()))
     copy_freeform_evals()
     mcp.run()
     # asyncio.run(debug()) 
