@@ -192,7 +192,7 @@ def anthropic_format(messages, tools, **kwargs) -> Dict[str, Any]:
     chat_messages = []
 
     if len(messages) > 0 and messages[0].role == MessageRole.system:
-        system_message = messages[0].content[0].text
+        system_message = "\n".join([block.text for block in messages[0].content])
         chat_messages = [msg.anthropic_format() for msg in messages[1:]]
     else:
         chat_messages = [msg.anthropic_format() for msg in messages]

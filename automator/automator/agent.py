@@ -65,7 +65,7 @@ class Agent:
         self.workspace = workspace
         self.id = id
         self.prompt_template_vars = prompt_template_vars or {}
-        self.hooks = hooks or []
+        self.hooks = hooks or ['claude.md']
         if workspace:
             id = id or f'{self.prompt_template_yaml.split("/")[-1].split(".")[0]}'
             workspace.register_agent(agent=self, id=id)
@@ -297,7 +297,7 @@ class Thread:
         return message
 
     async def apply_hooks(self):
-        self.messages_after_hooks = self.messages.copy()
+        self.messages_after_hooks = [ChatMessage(**msg.model_dump()) for msg in self.messages]
         for hook_name in self.hooks:
             hook = _HOOKS.get(hook_name)
             await hook(self)

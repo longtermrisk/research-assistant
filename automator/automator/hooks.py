@@ -1,7 +1,7 @@
 import os
 import glob
 import importlib.util
-
+from automator.dtypes import TextBlock
 
 _HOOKS = {}
 
@@ -22,3 +22,58 @@ def load_hooks():
         spec = importlib.util.spec_from_file_location(module_name, filepath)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
+
+
+# ------------- Default hooks -------------
+def init_claude_md(ws) -> None:
+    claude_md_path = ws.root / "LLM.md"
+    if not claude_md_path.exists():
+        with open(claude_md_path, "w") as f:
+            cwd_content_str = "\n".join([f"- {p.name}" for p in ws.root.iterdir() if p.is_file()])
+            f.write(f"""# {ws.name}
+This is an automatically generated overview of the current workspace.
+
+## Files
+
+{cwd_content_str}
+
+## Python
+
+This project uses uv to manage dependencies. The default python points to the local venv. Use `uv add <package>` to install a package.
+
+## Updating this file
+
+This file should serve as an onboarding guide for you in the future. Keep it up-to-date with info about:
+- the purpose of the project
+- the state of the code base
+- any other relevant information
+""")
+
+
+@register_hook('claude.md')
+async def claude_md(thread):
+    """If the thread has terminal tools, add CLAUDE.md to the system prompt."""
+    # Check if the thread has terminal tools
+    if not any(tool_name.startswith('terminal.') for tool_name in thread._tools):
+        return
+    # Check if the hook has already been applied
+    system_message = thread.messages_after_hooks[0]
+    if any((block.meta or {}).get('claude_md') for block in system_message.content):
+        return
+    # Add CLAUDE.md to the system prompt
+    if os.path.exists(thread.workspace.root / 'CLAUDE.md'):
+        with open(thread.workspace.root / 'CLAUDE.md', 'r') as f:
+            claude_md_text = f"<CLAUDE.md>\n{f.read()}\n</CLAUDE.md>"
+    else:
+        init_claude_md(thread.workspace)
+        with open(thread.workspace.root / 'LLM.md', 'r') as f:
+            claude_md_text = f"<LLM.md>\n{f.read()}\n</LLM.md>"
+    system_message.content += [
+        TextBlock(
+            text=claude_md_text,
+            meta={'claude_md': True}
+        )
+    ]
+    
+    
+    

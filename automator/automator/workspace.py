@@ -64,6 +64,7 @@ def _ensure_venv(path: Path) -> None:
     # subprocess.run(["uv", "add", "ipykernel", "pip", "ipython", "jupyterlab", "plotly", "matplotlib"], check=True, cwd=path)
     subprocess.run(["uv", "add", "ipykernel", "pip", "ipython", "jupyterlab", "pandas", "matplotlib"], check=True, cwd=path)
 
+
 class Workspace:
     def __init__(self, name: str, env: Optional[Dict[str, str]] = None):
         self.name = name # Store the original name
@@ -95,10 +96,10 @@ class Workspace:
             json.dump(self.env, f, ensure_ascii=False, indent=2)
             
         # Ensure the workspace directory exists
-        self.root = self.env['CWD']
+        self.root = Path(self.env['CWD'])
         os.makedirs(self.root, exist_ok=True)
         # Ensure venv exists in the workspace directory
-        _ensure_venv(Path(self.env['CWD']))
+        _ensure_venv(self.root)
     
     @staticmethod
     def list_workspaces() -> List[str]:
