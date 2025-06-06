@@ -1,4 +1,3 @@
-# editor_mcp.py
 import os
 import re
 import io # Use io instead of StringIO for BytesIO
@@ -136,6 +135,83 @@ def validate_content(content: str) -> str:
     return ""
 
 
+def _preserve_indentation(find: str, replace: str) -> str:
+    """Extract indentation from find string and apply to replace string."""
+    find_lines = find.split('\n')
+    replace_lines = replace.split('\n')
+    
+    if not find_lines or not replace_lines:
+        return replace
+    
+    # Get indentation from first non-empty line of find string
+    base_indent = ''
+    for line in find_lines:
+        if line.strip():  # Skip empty lines
+            base_indent = line[:len(line) - len(line.lstrip())]
+            break
+    
+    if not base_indent:
+        return replace
+    
+    # Apply indentation to replace string
+    indented_lines = []
+    for i, line in enumerate(replace_lines):
+        if i == 0:
+            # First line keeps original indentation from find context
+            indented_lines.append(base_indent + line.lstrip())
+        elif line.strip():  # Non-empty line
+            indented_lines.append(base_indent + line)
+        else:  # Empty line
+            indented_lines.append(line)
+    
+    return '\n'.join(indented_lines)
+
+
+def _get_similar_lines(content: str, find_string: str, max_lines: int = 5) -> List[str]:
+    """Find similar lines to help debug failed matches."""
+    lines = content.split('\n')
+    find_words = set(find_string.lower().split())
+    
+    similar = []
+    for i, line in enumerate(lines):
+        line_words = set(line.lower().split())
+        if find_words & line_words:  # Has common words
+            similar.append(f"Line {i+1}: {line[:100]}")
+        if len(similar) >= max_lines:
+            break
+    
+    return similar[:max_lines] if similar else ["No similar content found"]
+
+
+def _show_diff_preview(old_content: str, new_content: str, find_string: str) -> str:
+    """Show a preview of what will change."""
+    if old_content == new_content:
+        return "No changes would be made"
+    
+    # Find the changed sections
+    old_lines = old_content.split('\n')
+    new_lines = new_content.split('\n')
+    
+    # Simple diff - find first difference
+    for i, (old_line, new_line) in enumerate(zip(old_lines, new_lines)):
+        if old_line != new_line:
+            start = max(0, i - 2)
+            end = min(len(old_lines), i + 3)
+            
+            preview = []
+            preview.append(f"Changes around line {i+1}:")
+            for j in range(start, end):
+                if j < len(old_lines):
+                    prefix = "- " if j == i else "  "
+                    preview.append(f"{prefix}{old_lines[j]}")
+                if j == i and j < len(new_lines):
+                    preview.append(f"+ {new_lines[j]}")
+            
+            return '\n'.join(preview)
+    
+    return "Content length changed"
+
+
 @mcp.tool()
 async def get_file(path: str, ctx: Context = None) -> Union[str, Image, List[Union[str, Image]]]:
     workspace = os.path.abspath(".")
@@ -185,8 +261,6 @@ async def get_file(path: str, ctx: Context = None) -> Union[str, Image, List[Uni
     except Exception as exc:
         return f"Error reading file {path}: {exc}"
 
-
-# --- MCP Tool (Write) ---
 
 @mcp.tool()
 async def write_file(
@@ -272,6 +346,84 @@ async def write_file(
         except Exception as e:
             response += f"\nError during linting/formatting: {e}"
     return response_with_filediff(existing_content, cleaned_content, response)
+
+
+@mcp.tool()
+async def edit_file(
+    path: str,
+    find: str,
+    replace: str,
+    count: int = 1,
+    preserve_indentation: bool = True,
+    preview: bool = False,
+    ctx: Context = None
+) -> Union[str, TextContent]:
+    """
+    Edit a file by replacing exact string matches.
+    
+    Args:
+        path: File path to edit (relative to workspace)
+        find: Exact string to find and replace
+        replace: New string content
+        count: Number of replacements (1 for first match, -1 for all)
+        preserve_indentation: Auto-handle indentation based on find string
+        preview: If True, return preview without making changes
+    """
+    workspace = os.path.abspath(".")
+    abs_path = os.path.abspath(os.path.normpath(os.path.join(workspace, path)))
+
+    if not abs_path.startswith(workspace):
+        return f"Error: Access denied. Path '{path}' is outside the workspace."
+    
+    if not os.path.exists(abs_path):
+        return f"Error: File not found: {path}"
+    
+    if os.path.isdir(abs_path):
+        return f"Error: Cannot edit '{path}'. It is a directory."
+    
+    if path.endswith(".ipynb"):
+        return f"Error: Cannot edit '{path}'. It is a Jupyter notebook file. Use the jupyter tool to modify notebooks."
+
+    try:
+        # Read file
+        with open(abs_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Check if find string exists
+        if find not in content:
+            similar_lines = _get_similar_lines(content, find)
+            return f"Error: String not found in {path}\n\nSimilar content found:\n" + "\n".join(similar_lines)
+        
+        # Handle indentation preservation
+        processed_replace = replace
+        if preserve_indentation:
+            processed_replace = _preserve_indentation(find, replace)
+        
+        # Perform replacement
+        if count == -1:
+            new_content = content.replace(find, processed_replace)
+            actual_count = content.count(find)
+        else:
+            new_content = content.replace(find, processed_replace, count)
+            actual_count = min(count, content.count(find))
+        
+        # Preview mode
+        if preview:
+            preview_text = _show_diff_preview(content, new_content, find)
+            return f"Preview of changes to {path}:\n{preview_text}\n\nWould replace {actual_count} occurrence(s)."
+        
+        # Write file
+        with open(abs_path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+        
+        response = f"Successfully replaced {actual_count} occurrence(s) in {path}"
+        return response_with_filediff(content, new_content, response)
+        
+    except UnicodeDecodeError:
+        return f"Error: Cannot decode file {path} as UTF-8."
+    except Exception as e:
+        return f"Error editing file {path}: {str(e)}"
+
 
 def response_with_filediff(existing_content: str, new_content: str, response: str) -> TextContent:
     """
@@ -403,4 +555,3 @@ async def list_codebase_files(
         # Log the error maybe? ctx.error(...) ?
         print(f"Error listing files in '{codebase_path}': {e}")
         return f"An error occurred while listing files in '{codebase_path}': {e}"
-
