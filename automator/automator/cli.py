@@ -24,7 +24,7 @@ def workspace_add(args):
     try:
         workspace = Workspace(workspace_name, env=env)
         print(f"Created workspace '{workspace_name}' with CWD: {current_dir}")
-        print(f"Workspace path: {workspace.workspace_path}")
+        print(f"Workspace path: {workspace.root}")
     except Exception as e:
         print(f"Error creating workspace: {e}", file=sys.stderr)
         sys.exit(1)
