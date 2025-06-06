@@ -72,7 +72,7 @@ const MainView: React.FC = () => {
   const [selectedAgentForNewThread, setSelectedAgentForNewThread] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const [mentionedFilePaths, setMentionedFilePaths] = useState<string[]>([]);
+  const [selectedFilePaths, setSelectedFilePaths] = useState<Set<string>>(new Set());
   const [workspaceFiles, setWorkspaceFiles] = useState<FileSystemItem[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(false);
 
@@ -186,36 +186,37 @@ const MainView: React.FC = () => {
       });
     });
 
-    const payload = {
-      content: contentBlocks,
-      mentioned_file_paths: mentionedFilePaths.length > 0 ? mentionedFilePaths : undefined,
-    };
-
-    if (currentThread && threadId) {
-      try {
-        await api.postMessage(workspaceName, threadId, payload);
-        setNewMessage('');
-        setAttachedImages([]);
-        setMentionedFilePaths([]);
-      } catch (err: any) {
-        setError(err.message || 'Failed to send message');
-      }
-    } else if (selectedAgentForNewThread) {
-      try {
-        const newThreadSummary = await api.createThread(workspaceName, {
-          agent_id: selectedAgentForNewThread,
-          initial_content: contentBlocks,
+    const mentionedFilePaths = Array.from(selectedFilePaths);
+        const payload = {
+          content: contentBlocks,
           mentioned_file_paths: mentionedFilePaths.length > 0 ? mentionedFilePaths : undefined,
-        });
-        setNewMessage('');
-        setAttachedImages([]);
-        setMentionedFilePaths([]);
-        setSelectedAgentForNewThread(null);
-        navigate(`/workspace/${workspaceName}/thread/${newThreadSummary.id}`);
-      } catch (err: any) {
-        setError(err.message || 'Failed to create thread');
-      }
-    }
+        };
+
+        if (currentThread && threadId) {
+          try {
+            await api.postMessage(workspaceName, threadId, payload);
+            setNewMessage('');
+            setAttachedImages([]);
+            setSelectedFilePaths(new Set());
+          } catch (err: any) {
+            setError(err.message || 'Failed to send message');
+          }
+        } else if (selectedAgentForNewThread) {
+          try {
+            const newThreadSummary = await api.createThread(workspaceName, {
+              agent_id: selectedAgentForNewThread,
+              initial_content: contentBlocks,
+              mentioned_file_paths: mentionedFilePaths.length > 0 ? mentionedFilePaths : undefined,
+            });
+            setNewMessage('');
+            setAttachedImages([]);
+            setSelectedFilePaths(new Set());
+            setSelectedAgentForNewThread(null);
+            navigate(`/workspace/${workspaceName}/thread/${newThreadSummary.id}`);
+          } catch (err: any) {
+            setError(err.message || 'Failed to create thread');
+          }
+        }
     setIsLoading(false);
   };
 
@@ -396,8 +397,8 @@ const MainView: React.FC = () => {
             setNewMessage={setNewMessage}
             attachedImages={attachedImages}
             setAttachedImages={setAttachedImages}
-            mentionedFilePaths={mentionedFilePaths}
-            setMentionedFilePaths={setMentionedFilePaths}
+            selectedFilePaths={selectedFilePaths}
+                        setSelectedFilePaths={setSelectedFilePaths}
             workspaceFiles={workspaceFiles}
             isLoading={isLoading}
             isLoadingFiles={isLoadingFiles}

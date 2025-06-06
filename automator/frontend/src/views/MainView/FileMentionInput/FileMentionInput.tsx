@@ -5,7 +5,8 @@ import styles from './FileMentionInput.module.css';
 interface FileMentionInputProps {
   value: string;
   onChange: (value: string) => void;
-  onMentionedFilesChange: (paths: string[]) => void;
+  selectedFilePaths: Set<string>;
+    onSelectedFilePathsChange: (paths: Set<string>) => void;
   availableFiles: FileSystemItem[];
   textareaRef?: React.RefObject<HTMLTextAreaElement>;
   onSend?: () => void;
@@ -33,8 +34,9 @@ const getAllFilePathsInFolder = (folderItem: FileSystemItem): string[] => {
 const FileMentionInput: React.FC<FileMentionInputProps> = ({
   value,
   onChange,
-  onMentionedFilesChange,
-  availableFiles,
+    selectedFilePaths,
+    onSelectedFilePathsChange,
+    availableFiles,
   textareaRef: externalTextareaRef,
   onSend,
   onPaste
@@ -44,7 +46,7 @@ const FileMentionInput: React.FC<FileMentionInputProps> = ({
   const [filteredDisplayItems, setFilteredDisplayItems] = useState<DisplayItem[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
-  const [selectedFilePaths, setSelectedFilePaths] = useState<Set<string>>(new Set());
+  
   const [mentionStartIndex, setMentionStartIndex] = useState<number | null>(null);
 
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -147,9 +149,7 @@ const FileMentionInput: React.FC<FileMentionInputProps> = ({
     }
   }, [searchTerm, availableFiles, openFolders, showPopup, flattenAndFilter]);
 
-  useEffect(() => {
-    onMentionedFilesChange(Array.from(selectedFilePaths));
-  }, [selectedFilePaths, onMentionedFilesChange]);
+  
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const text = e.target.value;
@@ -234,7 +234,7 @@ const FileMentionInput: React.FC<FileMentionInputProps> = ({
         else filesInFolder.forEach(p => newSelectedPaths.delete(p));
       }
     }
-    setSelectedFilePaths(newSelectedPaths);
+    onSelectedFilePathsChange(newSelectedPaths);
   };
 
   const handleItemAction = (item: DisplayItem) => {
@@ -250,7 +250,7 @@ const FileMentionInput: React.FC<FileMentionInputProps> = ({
         filesInFolder.forEach(p => newSelectedPaths.add(p));
       }
     }
-    setSelectedFilePaths(newSelectedPaths);
+    onSelectedFilePathsChange(newSelectedPaths);
   };
 
   const handleKeyDownTextarea = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

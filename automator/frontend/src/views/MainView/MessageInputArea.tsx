@@ -15,8 +15,8 @@ interface MessageInputAreaProps {
   setNewMessage: (message: string) => void;
   attachedImages: AttachedImage[];
   setAttachedImages: (images: AttachedImage[]) => void;
-  mentionedFilePaths: string[];
-  setMentionedFilePaths: (paths: string[]) => void;
+  selectedFilePaths: Set<string>;
+    setSelectedFilePaths: (paths: Set<string>) => void;
   workspaceFiles: FileSystemItem[];
   isLoading: boolean;
   isLoadingFiles: boolean;
@@ -32,8 +32,8 @@ const MessageInputArea: React.FC<MessageInputAreaProps> = ({
   setNewMessage,
   attachedImages,
   setAttachedImages,
-  mentionedFilePaths,
-  setMentionedFilePaths,
+  selectedFilePaths,
+  setSelectedFilePaths,
   workspaceFiles,
   isLoading,
   isLoadingFiles,
@@ -155,7 +155,8 @@ const MessageInputArea: React.FC<MessageInputAreaProps> = ({
         <FileMentionInput
           value={newMessage}
           onChange={setNewMessage}
-          onMentionedFilesChange={setMentionedFilePaths}
+          selectedFilePaths={selectedFilePaths}
+          onSelectedFilePathsChange={setSelectedFilePaths}
           availableFiles={workspaceFiles}
           textareaRef={textareaRef}
           onSend={onSendMessage}
