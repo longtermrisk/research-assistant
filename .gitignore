@@ -192,3 +192,6 @@ planb/
 *.logs
 automator/resources/
 .DS_Store
+automator/prompts/shift_planner.yaml
+rag/
+.ragignore

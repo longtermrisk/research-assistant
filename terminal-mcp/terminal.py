@@ -176,7 +176,7 @@ async def terminal_stdin(
     text: str,
     detach_after_seconds: float = 5.0,
 ) -> str:
-    """Send text to the stdin of a running terminal session."""
+    """Send text to the stdin of a running terminal session. Send '^C' to interrupt."""
     session = sessions.get(tab_id)
     if not session:
         return f"[MCP_SERVER_ERROR] Tab ID '{tab_id}' not found."
@@ -184,6 +184,13 @@ async def terminal_stdin(
     process: AsyncPexpectProcess | None = session.get("process")  # type: ignore
     if process is None or not await process.is_alive():
         return f"[MCP_SERVER_ERROR] Process for tab '{tab_id}' is not running."
+    
+    if text.strip() == "^C":  # special case for Ctrl+C
+        try:
+            await process.send_raw("\x03")  # Ctrl+C
+            return f"[MCP_SERVER_INFO] Sent Ctrl+C to tab '{tab_id}'."
+        except Exception as exc:
+            return f"[MCP_SERVER_ERROR] Failed to send Ctrl+C to tab '{tab_id}': {exc}"
 
     try:
         await _send_interactive_text(process, text)

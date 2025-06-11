@@ -135,38 +135,6 @@ def validate_content(content: str) -> str:
     return ""
 
 
-def _preserve_indentation(find: str, replace: str) -> str:
-    """Extract indentation from find string and apply to replace string."""
-    find_lines = find.split('\n')
-    replace_lines = replace.split('\n')
-    
-    if not find_lines or not replace_lines:
-        return replace
-    
-    # Get indentation from first non-empty line of find string
-    base_indent = ''
-    for line in find_lines:
-        if line.strip():  # Skip empty lines
-            base_indent = line[:len(line) - len(line.lstrip())]
-            break
-    
-    if not base_indent:
-        return replace
-    
-    # Apply indentation to replace string
-    indented_lines = []
-    for i, line in enumerate(replace_lines):
-        if i == 0:
-            # First line keeps original indentation from find context
-            indented_lines.append(base_indent + line.lstrip())
-        elif line.strip():  # Non-empty line
-            indented_lines.append(base_indent + line)
-        else:  # Empty line
-            indented_lines.append(line)
-    
-    return '\n'.join(indented_lines)
-
-
 def _get_similar_lines(content: str, find_string: str, max_lines: int = 5) -> List[str]:
     """Find similar lines to help debug failed matches."""
     lines = content.split('\n')
@@ -255,7 +223,12 @@ async def get_file(path: str, ctx: Context = None) -> Union[str, Image, List[Uni
 
     try:
         with open(abs_path, "r", encoding="utf-8") as f:
-            return f.read()
+            text = f.read()
+            return TextContent(
+                text=text,
+                type="text",
+                annotations={'display_html': f"<pre>{text}</pre>"}
+            )
     except UnicodeDecodeError:
         return f"Error: Cannot decode file {path} as UTF-8."
     except Exception as exc:
@@ -354,7 +327,7 @@ async def edit_file(
     find: str,
     replace: str,
     count: int = 1,
-    preserve_indentation: bool = True,
+    auto_indent: bool = True,
     preview: bool = False,
     ctx: Context = None
 ) -> Union[str, TextContent]:
@@ -366,7 +339,6 @@ async def edit_file(
         find: Exact string to find and replace
         replace: New string content
         count: Number of replacements (1 for first match, -1 for all)
-        preserve_indentation: Auto-handle indentation based on find string
         preview: If True, return preview without making changes
     """
     workspace = os.path.abspath(".")
@@ -394,17 +366,12 @@ async def edit_file(
             similar_lines = _get_similar_lines(content, find)
             return f"Error: String not found in {path}\n\nSimilar content found:\n" + "\n".join(similar_lines)
         
-        # Handle indentation preservation
-        processed_replace = replace
-        if preserve_indentation:
-            processed_replace = _preserve_indentation(find, replace)
-        
         # Perform replacement
         if count == -1:
-            new_content = content.replace(find, processed_replace)
+            new_content = content.replace(find, replace)
             actual_count = content.count(find)
         else:
-            new_content = content.replace(find, processed_replace, count)
+            new_content = content.replace(find, replace, count)
             actual_count = min(count, content.count(find))
         
         # Preview mode

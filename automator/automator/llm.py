@@ -29,6 +29,7 @@ class Provider:
 anthr = anthropic.AsyncAnthropic()
 async def get_response_anthropic(messages, tools, **kwargs):
     kwargs = anthropic_format(messages, tools, **kwargs)
+    kwargs['timeout'] = 599  # Set a timeout of 10 minutes for the request
     resp = await anthr.messages.create(**kwargs)
     blocks = []
     for item in resp.content:

@@ -83,7 +83,7 @@ class Agent:
             elif 'gemini' in self.model:
                 max_tokens = 64000
             elif 'claude' in self.model:
-                max_tokens = 8000
+                max_tokens = 32000
             elif self.model.startswith('o'):
                 max_tokens = 64000
 
@@ -229,6 +229,7 @@ class Thread:
         self.hooks = hooks or []
         self._interrupted = False
         self.messages_after_hooks = []
+        self.inbox = []
         
     async def prepare(self):
         if self._ready: return
@@ -333,8 +334,10 @@ class Thread:
         if not self._ready:
             await self.prepare()
         self._interrupted = False
-        await self.apply_hooks()
         while not self._interrupted:
+            if self.inbox:
+                self.messages[-1].content, self.inbox = self.messages[-1].content + self.inbox, []
+            await self.apply_hooks()
             llm_response_message = await get_response(
                 model=self.model,
                 messages=self.messages_after_hooks,
@@ -342,6 +345,8 @@ class Thread:
                 temperature=self.temperature,
                 max_tokens=self.max_tokens
             )
+            if self.inbox:
+                continue
             yield await self._add_message(llm_response_message); await asyncio.sleep(0.1)
             tool_results_message, done = await self.process_message(llm_response_message)
             if done:

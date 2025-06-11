@@ -255,9 +255,9 @@ def openai_format(messages, tools, **kwargs) -> Dict[str, Any]:
         # representation.  For OpenAI we need to expand each tool result into
         # its own ``role == tool`` message so that the assistant can pick them
         # up in the correct format.
-        if all(isinstance(c, ToolResultBlock) for c in msg.content):  # type: ignore[arg-type]
-            for c in msg.content:  # type: ignore[assignment]
-                assert isinstance(c, ToolResultBlock)
+        non_tool_results = []
+        for c in msg.content:  # type: ignore[assignment]
+            if isinstance(c, ToolResultBlock):
                 # Concatenate all text parts inside the tool result.  The
                 # OpenAI spec expects a *single* string.
                 text_parts = [b.text for b in c.content if isinstance(b, TextBlock)]
@@ -281,8 +281,9 @@ def openai_format(messages, tools, **kwargs) -> Dict[str, Any]:
                             "content": _text_and_image_to_openai_parts(image_parts),
                         }
                     )
-            continue
-
+            else:
+                non_tool_results.append(c)
+        
         # Normal user / assistant / system messages
         role = msg.role.value
 
@@ -291,7 +292,7 @@ def openai_format(messages, tools, **kwargs) -> Dict[str, Any]:
         tool_calls = []
         text_and_images: List[ContentBlock] = []
 
-        for blk in msg.content:
+        for blk in non_tool_results:
             if isinstance(blk, ToolUseBlock):
                 tool_calls.append(
                     {
