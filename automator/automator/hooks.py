@@ -27,6 +27,9 @@ def load_hooks():
 # ------------- Default hooks -------------
 def init_claude_md(ws) -> None:
     claude_md_path = ws.root / "LLM.md"
+    if os.path.exists(ws.root / '.venv'):
+        python = "## Python\nThis project uses uv to manage dependencies. The default python points to the local venv. Use `uv add <package>` to install a package."
+
     if not claude_md_path.exists():
         with open(claude_md_path, "w") as f:
             cwd_content_str = "\n".join([f"- {p.name}" for p in ws.root.iterdir() if p.is_file()])
@@ -37,9 +40,7 @@ This is an automatically generated overview of the current workspace.
 
 {cwd_content_str}
 
-## Python
-
-This project uses uv to manage dependencies. The default python points to the local venv. Use `uv add <package>` to install a package.
+{python}
 
 ## Updating this file
 

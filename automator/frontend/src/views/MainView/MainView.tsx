@@ -80,6 +80,8 @@ const MainView: React.FC = () => {
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
+  const [isInterrupting, setIsInterrupting] = useState<boolean>(false);
+  const [isAgentProcessing, setIsAgentProcessing] = useState<boolean>(false);
 
   useEffect(() => {
     if (currentWorkspace && currentWorkspace.name && workspaceName) {
@@ -116,6 +118,16 @@ const MainView: React.FC = () => {
         .then((threadDetails) => {
           setCurrentThread(threadDetails);
           setMessages(threadDetails.messages || []);
+          
+          // Check if the last message indicates the agent might still be processing
+          const lastMessage = threadDetails.messages?.[threadDetails.messages.length - 1];
+          if (lastMessage && lastMessage.role === MessageRole.assistant) {
+            const hasToolUse = lastMessage.content.some(block => block.type === 'tool_use');
+            if (hasToolUse) {
+              setIsAgentProcessing(true); // Agent might still be processing tool results
+            }
+          }
+          
           setIsLoading(false);
         })
         .catch((err) => {
@@ -127,16 +139,39 @@ const MainView: React.FC = () => {
       const sse = getMessagesSSE(workspaceName, threadId);
       sse.onmessage = (event) => {
         const newMessageData = JSON.parse(event.data) as ApiChatMessage;
-        // Ensure new messages also have an ID if possible, or are handled correctly by findIndex
-        // For now, assuming backend provides IDs for SSE messages too.
+        
+        // Check if this is an assistant message that indicates processing is complete
+        if (newMessageData.role === MessageRole.assistant) {
+          // If the assistant message has no tool_use blocks, the agent is likely done processing
+          const hasToolUse = newMessageData.content.some(block => block.type === 'tool_use');
+          console.log(`[SSE] Assistant message received, hasToolUse: ${hasToolUse}`);
+          if (!hasToolUse) {
+            console.log('[SSE] Agent processing complete (no tool_use blocks)');
+            setIsAgentProcessing(false);
+          } else {
+            console.log('[SSE] Agent still processing (has tool_use blocks)');
+            setIsAgentProcessing(true);
+          }
+        }
+        
+        // If we receive an error message, agent has stopped processing
+        if (newMessageData.meta && newMessageData.meta.error) {
+          console.log('[SSE] Error message received, stopping agent processing');
+          setIsAgentProcessing(false);
+        }
+        
         setMessages((prevMessages) => [...prevMessages, newMessageData]);
       };
       sse.onerror = (err) => {
         console.error('SSE Error:', err);
         setError((prev) => prev || 'Connection error with server updates.');
+        setIsAgentProcessing(false); // Stop processing on SSE error
         sse.close();
       };
-      return () => sse.close();
+      return () => {
+        sse.close();
+        setIsAgentProcessing(false); // Stop processing when SSE closes
+      };
     } else {
       setCurrentThread(null);
       setMessages([]);
@@ -149,7 +184,12 @@ const MainView: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  useEffect(scrollToBottom, [messages, attachedImages]);
+  // Auto-scroll to bottom only if user is not scrolled up
+  useEffect(() => {
+    if (!isScrolledUp) {
+      scrollToBottom();
+    }
+  }, [messages, attachedImages, isScrolledUp]);
 
   const handleScroll = () => {
     if (chatContainerRef.current) {
@@ -198,6 +238,7 @@ const MainView: React.FC = () => {
             setNewMessage('');
             setAttachedImages([]);
             setSelectedFilePaths(new Set());
+            setIsAgentProcessing(true); // Agent will start processing
           } catch (err: any) {
             setError(err.message || 'Failed to send message');
           }
@@ -212,12 +253,29 @@ const MainView: React.FC = () => {
             setAttachedImages([]);
             setSelectedFilePaths(new Set());
             setSelectedAgentForNewThread(null);
+            setIsAgentProcessing(true); // Agent will start processing
             navigate(`/workspace/${workspaceName}/thread/${newThreadSummary.id}`);
           } catch (err: any) {
             setError(err.message || 'Failed to create thread');
           }
         }
     setIsLoading(false);
+  };
+
+  const handleInterruptThread = async () => {
+    if (!threadId) return;
+    
+    setIsInterrupting(true);
+    try {
+      const result = await api.interruptThread(threadId);
+      console.log('Thread interrupted:', result.message);
+      setIsAgentProcessing(false); // Agent processing should stop after interrupt
+      // Optionally show a success message to the user
+    } catch (err: any) {
+      console.error('Failed to interrupt thread:', err);
+      setError(err.message || 'Failed to interrupt thread');
+    }
+    setIsInterrupting(false);
   };
 
   const handleAgentSelectionForNewThread = (agentId: string) => {
@@ -398,13 +456,16 @@ const MainView: React.FC = () => {
             attachedImages={attachedImages}
             setAttachedImages={setAttachedImages}
             selectedFilePaths={selectedFilePaths}
-                        setSelectedFilePaths={setSelectedFilePaths}
+            setSelectedFilePaths={setSelectedFilePaths}
             workspaceFiles={workspaceFiles}
             isLoading={isLoading}
             isLoadingFiles={isLoadingFiles}
             threadId={threadId}
             selectedAgentForNewThread={selectedAgentForNewThread}
             onSendMessage={handleSendMessage}
+            onInterruptThread={handleInterruptThread}
+            isInterrupting={isInterrupting}
+            isAgentProcessing={isAgentProcessing}
             isDragging={isDragging}
             setIsDragging={setIsDragging}
           />

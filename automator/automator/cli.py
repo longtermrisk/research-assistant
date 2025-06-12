@@ -19,8 +19,7 @@ def workspace_add(args):
     workspace_name = args.name if args.name else current_dir.name
     
     # Create workspace with current directory as CWD
-    env = {'CWD': str(current_dir)}
-    
+    env {'CWD': str(current_dir), 'ENSURE_VENV': "FALSE"}
     try:
         workspace = Workspace(workspace_name, env=env)
         print(f"Created workspace '{workspace_name}' with CWD: {current_dir}")

@@ -299,6 +299,30 @@
   cursor: not-allowed;
 }
 
+.message-input-area .attach-button {
+  background-color: var(--button-secondary-background);
+  color: var(--button-secondary-foreground);
+  border: 1px solid var(--border-secondary);
+  padding: 8px 12px;
+  font-size: 1.2em;
+}
+
+.message-input-area .interrupt-button {
+  background-color: #dc3545; /* Red background for stop/interrupt */
+  color: white;
+  font-size: 0.9em;
+  padding: 8px 12px;
+}
+
+.message-input-area .interrupt-button:hover:not(:disabled) {
+  background-color: #c82333;
+}
+
+.message-input-area .interrupt-button:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+}
+
 /* New Thread Agent Selection */
 .new-thread-agent-selection {
   padding: 20px;

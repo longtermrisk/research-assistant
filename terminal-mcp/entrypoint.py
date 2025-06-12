@@ -41,8 +41,10 @@ if __name__ == "__main__":
     CWD = os.environ.get("CWD", os.getcwd())
     os.chdir(CWD)
     load_dotenv(os.path.join(CWD, ".env"))
-    _ensure_venv(Path(CWD))
-    activate_venv()
+    if os.environ.get("ENSURE_VENV", "TRUE").upper() == "TRUE":
+        _ensure_venv(Path(CWD))
+    if os.path.exists(os.path.join(CWD, ".venv")):
+        activate_venv()
     from terminal import sessions, AsyncPexpectProcess
     from jupyter import jupyter # noqa: F401 – imported for side effects
     import editor # noqa: F401 – imported for side effects

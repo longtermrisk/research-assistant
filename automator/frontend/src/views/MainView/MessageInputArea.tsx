@@ -16,13 +16,16 @@ interface MessageInputAreaProps {
   attachedImages: AttachedImage[];
   setAttachedImages: (images: AttachedImage[]) => void;
   selectedFilePaths: Set<string>;
-    setSelectedFilePaths: (paths: Set<string>) => void;
+  setSelectedFilePaths: (paths: Set<string>) => void;
   workspaceFiles: FileSystemItem[];
   isLoading: boolean;
   isLoadingFiles: boolean;
   threadId?: string;
   selectedAgentForNewThread: string | null;
   onSendMessage: () => void;
+  onInterruptThread: () => void;
+  isInterrupting: boolean;
+  isAgentProcessing: boolean;
   isDragging: boolean;
   setIsDragging: (isDragging: boolean) => void;
 }
@@ -40,6 +43,9 @@ const MessageInputArea: React.FC<MessageInputAreaProps> = ({
   threadId,
   selectedAgentForNewThread,
   onSendMessage,
+  onInterruptThread,
+  isInterrupting,
+  isAgentProcessing,
   isDragging,
   setIsDragging
 }) => {
@@ -178,6 +184,17 @@ const MessageInputArea: React.FC<MessageInputAreaProps> = ({
         >
           📎
         </button>
+        {threadId && (
+          <button
+            onClick={onInterruptThread}
+            disabled={isInterrupting || !isAgentProcessing}
+            className="interrupt-button"
+            aria-label="Interrupt current operation"
+            title="Interrupt current operation"
+          >
+            {isInterrupting ? 'Interrupting...' : '⏹️ Stop'}
+          </button>
+        )}
         <button
           onClick={onSendMessage}
           disabled={

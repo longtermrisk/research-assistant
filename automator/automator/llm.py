@@ -45,7 +45,6 @@ async def get_response_anthropic(messages, tools, **kwargs):
 # OpenAI provider
 # ---------------------------------------------------------------------------
 
-
 def get_response_factory(oai: openai.AsyncOpenAI):
     async def get_response_openai(messages, tools, **kwargs):
         """Return a ``ChatMessage`` from OpenAI's Chat Completions endpoint.
@@ -64,8 +63,11 @@ def get_response_factory(oai: openai.AsyncOpenAI):
         if "model" not in kwargs:
             raise ValueError("'model' is required for OpenAI completions")
 
-        resp = await oai.chat.completions.create(**kwargs)
-
+        try:
+            resp = await oai.chat.completions.create(**kwargs)
+        except Exception as e:
+            print(e)
+            breakpoint()
         # We do **not** request streaming responses because the surrounding code
         # expects the assistant's answer to be available in one go.  The first –
         # and only – choice therefore contains the message we need.
@@ -122,6 +124,7 @@ def get_response_factory(oai: openai.AsyncOpenAI):
 
         return ChatMessage(role=MessageRole.assistant, content=blocks)
     return get_response_openai
+
 
 
 _available_anthropic_models: List[str]

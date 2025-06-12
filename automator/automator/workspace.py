@@ -55,7 +55,7 @@ def _slugify(name: str) -> str:
     return "".join(c if c in allowed else "-" for c in name).strip("-_.")
 
 class Workspace:
-    def __init__(self, name: str, env: Optional[Dict[str, str]] = None):
+    def __init__(self, name: str, env: Optional[Dict[str, Any]] = None):
         self.name = name # Store the original name
         self._root_dir: Path = self._resolve_workspace_dir(name)
         

@@ -334,10 +334,10 @@ class Thread:
         if not self._ready:
             await self.prepare()
         self._interrupted = False
+        await self.apply_hooks()
         while not self._interrupted:
             if self.inbox:
                 self.messages[-1].content, self.inbox = self.messages[-1].content + self.inbox, []
-            await self.apply_hooks()
             llm_response_message = await get_response(
                 model=self.model,
                 messages=self.messages_after_hooks,

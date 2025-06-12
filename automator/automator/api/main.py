@@ -190,6 +190,9 @@ class MessagePostRequest(BaseModel):
     content: List[ApiContentBlock]
     mentioned_file_paths: Optional[List[str]] = None # Added
 
+class InterruptRequest(BaseModel):
+    thread_id: str
+
 # FileSystemItem for the new /files endpoint
 class FileSystemItem(BaseModel):
     id: str
@@ -596,3 +599,26 @@ async def sse_messages_api(request: Request, workspace_name: str, thread_id: str
             broadcaster.unsubscribe(thread_id, queue)
             logger.info(f"SSE connection closed for thread {thread_id}")
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.post("/interrupt")
+async def interrupt_thread_api(interrupt_data: InterruptRequest):
+    """Interrupt a running thread by calling thread.interrupt()."""
+    thread_id = interrupt_data.thread_id
+    
+    # Find the thread in active_threads cache
+    thread_found = False
+    async with _active_threads_dict_lock:
+        for cache_key, (thread, _) in active_threads.items():
+            if thread.id == thread_id:
+                thread_found = True
+                try:
+                    thread.interrupt()
+                    logger.info(f"Successfully interrupted thread {thread_id}")
+                    return {"message": f"Thread {thread_id} interrupted successfully"}
+                except Exception as e:
+                    logger.error(f"Error interrupting thread {thread_id}: {e}", exc_info=True)
+                    raise HTTPException(status_code=500, detail=f"Failed to interrupt thread {thread_id}: {str(e)}")
+                break
+    
+    if not thread_found:
+        raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found in active threads")

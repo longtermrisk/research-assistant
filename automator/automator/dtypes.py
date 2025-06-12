@@ -319,6 +319,9 @@ def openai_format(messages, tools, **kwargs) -> Dict[str, Any]:
         if tool_calls:
             oai_msg["tool_calls"] = tool_calls
 
+        if oai_msg["content"] is None and not tool_calls:
+            # If the message has no content and no tool calls, we skip it
+            continue
         oai_messages.append(oai_msg)
 
     kwargs["messages"] = oai_messages

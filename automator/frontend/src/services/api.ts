@@ -114,3 +114,13 @@ export async function postMessage(workspaceName: string, threadId: string, paylo
 export function getMessagesSSE(workspaceName: string, threadId: string): EventSource {
   return new EventSource(`${API_BASE_URL}/workspaces/${workspaceName}/threads/${threadId}/messages/sse`);
 }
+
+// --- Interrupt Endpoint ---
+export async function interruptThread(threadId: string): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE_URL}/interrupt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ thread_id: threadId }),
+  });
+  return handleResponse<{ message: string }>(response);
+}
