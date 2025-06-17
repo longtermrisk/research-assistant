@@ -192,7 +192,7 @@ const MessageInputArea: React.FC<MessageInputAreaProps> = ({
             aria-label="Interrupt current operation"
             title="Interrupt current operation"
           >
-            {isInterrupting ? 'Interrupting...' : '⏹️ Stop'}
+            {isInterrupting ? 'Interrupting...' : '⏹️ '}
           </button>
         )}
         <button

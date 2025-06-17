@@ -344,7 +344,7 @@ class Thread:
                 tools=[t for t in self.tools if hasattr(t, 'definition')],
                 temperature=self.temperature,
                 max_tokens=self.max_tokens
-            )
+            ); await asyncio.sleep(0.1)
             if self.inbox:
                 continue
             yield await self._add_message(llm_response_message); await asyncio.sleep(0.1)
