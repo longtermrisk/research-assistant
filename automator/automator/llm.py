@@ -151,7 +151,6 @@ providers = [
 # ---------------------------------------------------------------------------
 # Register OpenRouter models
 # ---------------------------------------------------------------------------
-
 if 'OPENROUTER_API_KEY' in os.environ:
     providers.append(
         Provider(
@@ -198,8 +197,8 @@ if 'OPENAI_API_KEY' in os.environ:
 async def get_response(model, messages, **kwargs):
     all_models = []
     for provider in providers:
+        all_models.extend(provider.models)
         if model in provider.models:
-            all_models.append(model)
             response = await provider.get_response(model=model, messages=messages, **kwargs)
             if len(response.content) == 0:
                 messages = messages + [

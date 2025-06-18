@@ -36,7 +36,7 @@ def setup_mcp_dot_json():
         with open(os.path.expanduser('~/mcp.json'), 'r') as f:
             existing_mcp_json = json.load(f)
     else:
-        existing_mcp_json = {}
+        existing_mcp_json = {'mcpServers': {}}
 
     with open(os.path.join(os.path.dirname(__file__), 'mcp.json'), 'r') as f:
         mcp_json = f.read()
