@@ -19,7 +19,10 @@ def workspace_add(args):
     workspace_name = args.name if args.name else current_dir.name
     
     # Create workspace with current directory as CWD
-    env {'CWD': str(current_dir), 'ENSURE_VENV': "FALSE"}
+    env = {
+        'CWD': str(current_dir),
+        'ENSURE_VENV': "TRUE" if args.venv else "FALSE"
+    }
     try:
         workspace = Workspace(workspace_name, env=env)
         print(f"Created workspace '{workspace_name}' with CWD: {current_dir}")
@@ -53,6 +56,11 @@ def main():
     add_parser.add_argument(
         "--name", 
         help="Workspace name (default: directory name)"
+    )
+    add_parser.add_argument(
+        "--venv",
+        action="store_true",
+        help="Ensure a virtual environment is created"
     )
     add_parser.set_defaults(func=workspace_add)
     

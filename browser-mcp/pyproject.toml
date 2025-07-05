@@ -1,0 +1,11 @@
+[project]
+name = "browser-mcp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp[cli]>=1.10.1",
+    "pyppeteer>=2.0.0",
+    "regex>=2024.11.6",
+]

@@ -338,34 +338,35 @@ async def list_tools_api():
     """
     if not _SERVERS:
         return []
+    return [McpServerTools(server_name=mcp_server, tools=[]) for mcp_server in _SERVERS]
 
-    # Minimal message list required by Thread
-    placeholder_messages = [
-        ChatMessage(role=MessageRole.system, content=[TextBlock(text="Tool discovery thread")])
-    ]
+    # # Minimal message list required by Thread
+    # placeholder_messages = [
+    #     ChatMessage(role=MessageRole.system, content=[TextBlock(text="Tool discovery thread")])
+    # ]
 
-    tools_data: List[McpServerTools] = [] # Changed from dict to list
-    for mcp_server in _SERVERS:
-        thread = Thread(
-            model="noop",
-            messages=placeholder_messages,
-            tools=[f"{mcp_server}.*"],
-            env={},
-            subagents=[],
-        )
-        try:
-            await thread.prepare()
-            tool_definitions = [tool.definition for tool in thread.tools]
-            tools_data.append(McpServerTools(server_name=mcp_server, tools=tool_definitions))
-        except Exception as e:
-            logger.error(f"Error preparing tools for MCP server {mcp_server}: {e}", exc_info=True)
-            tools_data.append(McpServerTools(server_name=mcp_server, tools=[])) 
-        finally:
-            try:
-                await thread.cleanup()
-            except Exception:
-                pass # Already logged if an error occurred during prepare.
-    return tools_data
+    # tools_data: List[McpServerTools] = [] # Changed from dict to list
+    # for mcp_server in _SERVERS:
+    #     thread = Thread(
+    #         model="noop",
+    #         messages=placeholder_messages,
+    #         tools=[f"{mcp_server}.*"],
+    #         env={'CWD': '/tmp'},
+    #         subagents=[],
+    #     )
+    #     try:
+    #         await thread.prepare()
+    #         tool_definitions = [tool.definition for tool in thread.tools]
+    #         tools_data.append(McpServerTools(server_name=mcp_server, tools=tool_definitions))
+    #     except Exception as e:
+    #         logger.error(f"Error preparing tools for MCP server {mcp_server}: {e}", exc_info=True)
+    #         tools_data.append(McpServerTools(server_name=mcp_server, tools=[])) 
+    #     finally:
+    #         try:
+    #             await thread.cleanup()
+    #         except Exception:
+    #             pass # Already logged if an error occurred during prepare.
+    # return tools_data
 
 @app.post("/workspaces", response_model=WorkspaceResponse, status_code=201)
 async def create_workspace_api(workspace_data: WorkspaceCreate):

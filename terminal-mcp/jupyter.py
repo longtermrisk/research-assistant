@@ -46,6 +46,10 @@ def process_html(html_content):
     html_content = f"<!DOCTYPE html><html><head></head><body>{html_content}</body></html>"
     return html_content
 
+def maybe_shorten(text):
+    lines = text.split('\n')
+    if len(lines) > 150:
+        return "\n".join(lines[:50]) + f"\n... ({len(lines) - 100} lines skipped)" + "\n".join(lines[-50:])
 
 # Helper function refactored from open_jupyter_notebook
 def _format_notebook_to_blocks(nb: nbformat.NotebookNode, title: str) -> List[Union[str, Image]]:
@@ -55,7 +59,7 @@ def _format_notebook_to_blocks(nb: nbformat.NotebookNode, title: str) -> List[Un
 
     def flush():
         if text_buf:
-            blocks.append("".join(text_buf))
+            blocks.append(maybe_shorten("".join(text_buf)))
             text_buf.clear()
 
     text_buf.append(f"{title}\n\n")
@@ -334,7 +338,7 @@ class JupyterNotebook:
             elif output_type == 'stream':
                 # Handle stdout/stderr, clean ANSI codes
                 stream_text = output.get('text', '')
-                cleaned_text = clean_ansi(stream_text).strip()
+                cleaned_text = maybe_shorten(clean_ansi(stream_text).strip())
                 if cleaned_text: # Add only if there's non-empty text
                     results.append(TextContent(type='text', text=cleaned_text))
 
@@ -370,7 +374,7 @@ class JupyterNotebook:
                     text_content = data['text/plain']
                     if isinstance(text_content, list): # Sometimes it's a list of strings
                         text_content = '\n'.join(text_content)
-                    cleaned_text = clean_ansi(text_content).strip()
+                    cleaned_text = maybe_shorten(clean_ansi(text_content).strip())
                     if cleaned_text: # Add only if there's non-empty text
                          results.append(TextContent(type='text', text=cleaned_text))
             else: # Optionally log unhandled types
