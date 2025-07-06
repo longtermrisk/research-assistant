@@ -75,6 +75,3 @@ async def claude_md(thread):
             meta={'claude_md': True}
         )
     ]
-    
-    
-    

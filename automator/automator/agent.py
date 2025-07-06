@@ -314,6 +314,8 @@ class Thread:
         self.messages_after_hooks = [ChatMessage(**msg.model_dump()) for msg in self.messages]
         for hook_name in self.hooks:
             hook = _HOOKS.get(hook_name)
+            if hook is None:
+                raise ValueError(f"Hook '{hook_name}' is not registered. Make sure to register hooks using @register_hook decorator.")
             await hook(self)
         # Remove any tool use messages when the tool result is not present
         messages = []

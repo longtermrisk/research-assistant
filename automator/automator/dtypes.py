@@ -60,7 +60,7 @@ class MessageRole(str, Enum):
 class TextBlock(BaseModel):
     text: str
     type: str = "text"
-    meta: Optional[Dict[str, Any]] = None
+    meta: Dict[str, Any] = Field(default_factory=dict)
 
     def anthropic_format(self) -> Dict[str, Any]:
         return {
@@ -78,7 +78,7 @@ class Base64ImageSource(BaseModel):
 class ImageBlock(BaseModel):
     source: Base64ImageSource
     type: str = "image"
-    meta: Optional[Dict[str, Any]] = None
+    meta: Dict[str, Any] = Field(default_factory=dict)
 
     @staticmethod
     def from_base64(data: str, media_type: str = "image/png", meta=None) -> "ImageBlock":
@@ -103,7 +103,7 @@ class ToolUseBlock(BaseModel):
     input: Optional[Dict[str, Any]] = None
     name: str
     type: str = "tool_use"
-    meta: Optional[Dict[str, Any]] = None
+    meta: Dict[str, Any] = Field(default_factory=dict)
 
     def anthropic_format(self) -> Dict[str, Any]:
         return {
@@ -118,7 +118,7 @@ class ToolResultBlock(BaseModel):
     tool_use_id: str
     content: List[Union[TextBlock, ImageBlock]]
     type: str = "tool_result"
-    meta: Optional[Dict[str, Any]] = None
+    meta: Dict[str, Any] = Field(default_factory=dict)
     
     def anthropic_format(self) -> Dict[str, Any]:
         return {
@@ -134,7 +134,7 @@ ContentBlock = Union[TextBlock, ImageBlock, ToolUseBlock, ToolResultBlock]
 class ChatMessage(BaseModel):
     role: MessageRole
     content: List[ContentBlock]
-    meta: Optional[Dict[str, Any]] = None
+    meta: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("role", mode="before")
     @classmethod
