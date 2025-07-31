@@ -18,6 +18,12 @@ from server import mcp
 
 
 
+def print(*args):
+    with open("stdout", "a") as f:
+        for c in args:
+            f.write(str(c) + "\n")
+    
+
 def replace_require_plotly(html_content):
     # Check if plotly require pattern exists in the HTML
     if 'require(["plotly"]' not in html_content:
@@ -50,6 +56,7 @@ def maybe_shorten(text):
     lines = text.split('\n')
     if len(lines) > 150:
         return "\n".join(lines[:50]) + f"\n... ({len(lines) - 100} lines skipped)" + "\n".join(lines[-50:])
+    return text
 
 # Helper function refactored from open_jupyter_notebook
 def _format_notebook_to_blocks(nb: nbformat.NotebookNode, title: str) -> List[Union[str, Image]]:
@@ -327,6 +334,8 @@ class JupyterNotebook:
         for output in cell.outputs:
             output_type = output.get('output_type', '')
 
+            print(output, output_type)
+
             if output_type == 'error':
                 # Handle error output
                 error_msg = '\n'.join(output.get('traceback', []))
@@ -339,6 +348,10 @@ class JupyterNotebook:
                 # Handle stdout/stderr, clean ANSI codes
                 stream_text = output.get('text', '')
                 cleaned_text = maybe_shorten(clean_ansi(stream_text).strip())
+                print({
+                    'stream_text': stream_text,
+                    'cleaned_text': cleaned_text
+                })
                 if cleaned_text: # Add only if there's non-empty text
                     results.append(TextContent(type='text', text=cleaned_text))
 
@@ -380,6 +393,7 @@ class JupyterNotebook:
             else: # Optionally log unhandled types
                  results.append(TextContent(type='text', text=f"Note: Unhandled output type '{output_type}' encountered."))
         
+        print("results", results)
         return results
 
     def save(self):
@@ -425,8 +439,8 @@ import asyncio
 
 @mcp.tool()
 async def jupyter(
-    code: str = Field(..., description="The Python code to execute in the notebook."),
-    path: Optional[str] = Field(None, description="Path to a .ipynb file. If provided and exists, existing cells are run on first call. If provided but doesn't exist, a new notebook is created at this key. If omitted, a temporary stateful notebook is used.")
+    code: str,
+    path: Optional[str] = None
 ) -> List[Union[str, Image]]:
     """
     Run Python code in a Jupyter notebook environment. Maintains state per notebook path.
@@ -498,8 +512,11 @@ async def jupyter(
 
     # Now, execute the *new* code provided in the call
     print(f"Executing provided code in notebook for key: {notebook_key}...")
+    new_cell_outputs : List[Union[TextContent, Image]] = [
+        TextContent(type="text", text="", annotations={'display_html': f"<pre>{code}</pre>"})
+    ]
     try:
-        new_cell_outputs = await notebook.execute_new_code(code)
+        new_cell_outputs += await notebook.execute_new_code(code)
     except Exception as e:
         # Catch unexpected errors during the execution of the new code
         import traceback
@@ -537,3 +554,4 @@ async def cleanup_all_notebooks():
         await notebook.cleanup()
         del _OPEN_NOTEBOOKS[key]
      print("Finished cleaning up notebooks.")
+

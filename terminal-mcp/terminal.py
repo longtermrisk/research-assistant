@@ -174,7 +174,7 @@ async def terminal_execute(command: str, detach_after_seconds: float = 5.0) -> s
 async def terminal_stdin(
     tab_id: str,
     text: str,
-    detach_after_seconds: float = 5.0,
+    detach_after_seconds: float = 30.0,
 ) -> str:
     """Send text to the stdin of a running terminal session. Send '^C' to interrupt."""
     session = sessions.get(tab_id)
