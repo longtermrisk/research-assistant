@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from .workspace import Workspace
-
+from .agent import Agent
 
 def workspace_add(args):
     """Add a new workspace with the current directory as CWD."""
@@ -30,6 +30,43 @@ def workspace_add(args):
     except Exception as e:
         print(f"Error creating workspace: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+def workspace_create_expert(args):
+    """Clones args.github_url into a new workspace and creates an agent with terminal access in it"""
+    target_dir = Workspace._resolve_workspace_dir(args.github_repo)
+    # clone the repo into the target_dir
+    import subprocess
+    
+    # Create parent directory if it doesn't exist
+    target_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    # Clone the repo
+    try:
+        subprocess.run(
+            ["git", "clone", f"https://github.com/{args.github_repo}.git", str(target_dir)],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"Error cloning repository: {e.stderr}", file=sys.stderr)
+        sys.exit(1)
+    # Create the workspace
+    env = {
+        'CWD': str(target_dir),
+        'ENSURE_VENV': "TRUE"
+    }
+    workspace = Workspace('shared')
+    # Create the agent
+    expert = Agent(
+        id=args.github_repo.split('/')[-1],
+        workspace=workspace,
+        model='google/gemini-2.5-pro',
+        prompt_template_yaml=f"prompts/{args.prompt}.yaml",
+        tools=["terminal.get_file", "terminal.list_codebase_files"],
+        env=env
+    )
 
 
 def main():
@@ -57,13 +94,30 @@ def main():
         "--name", 
         help="Workspace name (default: directory name)"
     )
-    add_parser.add_argument(
+    add_parser.add_argument(  # Add venv argument to match workspace_create_expert
         "--venv",
         action="store_true",
         help="Ensure a virtual environment is created"
     )
     add_parser.set_defaults(func=workspace_add)
-    
+
+    # ws create-expert command
+    expert_parser = ws_subparsers.add_parser("create-expert", help="Create expert workspace from GitHub repo")
+    expert_parser.add_argument(
+        "github_repo",
+        help="GitHub repository (`owner/repo`)"
+    )
+    expert_parser.add_argument(
+        "--prompt",
+        default="expert",
+        help="Prompt template to use (default: expert)"
+    )
+    expert_parser.add_argument(  # Add venv argument to match workspace_create_expert
+        "--venv",
+        action="store_true",
+        help="Ensure a virtual environment is created"
+    )
+    expert_parser.set_defaults(func=workspace_create_expert)
     args = parser.parse_args()
     
     if not hasattr(args, 'func'):

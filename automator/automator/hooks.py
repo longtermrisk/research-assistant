@@ -25,15 +25,16 @@ def load_hooks():
 
 
 # ------------- Default hooks -------------
-def init_claude_md(ws) -> None:
-    claude_md_path = ws.root / "LLM.md"
-    if os.path.exists(ws.root / '.venv'):
+def init_claude_md(thread) -> None:
+    home = thread.home
+    claude_md_path = home / "LLM.md"
+    if os.path.exists(home / '.venv'):
         python = "## Python\nThis project uses uv to manage dependencies. The default python points to the local venv. Use `uv add <package>` to install a package."
 
     if not claude_md_path.exists():
         with open(claude_md_path, "w") as f:
-            cwd_content_str = "\n".join([f"- {p.name}" for p in ws.root.iterdir() if p.is_file()])
-            f.write(f"""# {ws.name}
+            cwd_content_str = "\n".join([f"- {p.name}" for p in home.iterdir() if p.is_file()])
+            f.write(f"""# {thread.workspace.name}
 This is an automatically generated overview of the current workspace.
 
 ## Files
@@ -62,12 +63,15 @@ async def claude_md(thread):
     if any((block.meta or {}).get('claude_md') for block in system_message.content):
         return
     # Add CLAUDE.md to the system prompt
-    if os.path.exists(thread.workspace.root / 'CLAUDE.md'):
-        with open(thread.workspace.root / 'CLAUDE.md', 'r') as f:
+    if os.path.exists(thread.home / 'LLM.md'):
+        with open(thread.home / 'LLM.md', 'r') as f:
+            claude_md_text = f"<LLM.md>\n{f.read()}\n</LLM.md>"
+    elif os.path.exists(thread.home / 'CLAUDE.md'):
+        with open(thread.home / 'CLAUDE.md', 'r') as f:
             claude_md_text = f"<CLAUDE.md>\n{f.read()}\n</CLAUDE.md>"
     else:
-        init_claude_md(thread.workspace)
-        with open(thread.workspace.root / 'LLM.md', 'r') as f:
+        init_claude_md(thread)
+        with open(thread.home / 'LLM.md', 'r') as f:
             claude_md_text = f"<LLM.md>\n{f.read()}\n</LLM.md>"
     system_message.content += [
         TextBlock(

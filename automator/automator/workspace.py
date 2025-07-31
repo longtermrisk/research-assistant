@@ -54,6 +54,7 @@ def _slugify(name: str) -> str:
     allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
     return "".join(c if c in allowed else "-" for c in name).strip("-_.")
 
+
 class Workspace:
     def __init__(self, name: str, env: Optional[Dict[str, Any]] = None):
         self.name = name # Store the original name
@@ -118,13 +119,13 @@ class Workspace:
         return self._thread_dir / f"{_slugify(thread_id)}.json"
 
     def register_agent(self, *, agent: Agent, id: str) -> None:
-        agent.env = {**agent.env, **self.env}
+        agent.env = {**self.env, **agent.env}
         agent.workspace = self # Assign the workspace instance
         agent.id = id # Ensure agent has its ID
         self._save_json(self._agent_path(id), agent.json())
 
     def add_agent(self, *, agent: Agent, id: str) -> Agent:
-        merged_env = {**agent.env, **self.env} # Workspace env overrides agent on conflict
+        merged_env = {**self.env, **agent.env} # agent env overrides workspace env on conflict
         
         # Create a new Agent instance to ensure it's clean and has the merged_env
         # and correct workspace association and ID.
@@ -152,7 +153,7 @@ class Workspace:
         # For get_agent, we want to reflect that persisted state, potentially re-applying current workspace.env overrides.
         # The current workspace instance's self.env should take precedence for CWD or any live overrides.
         persisted_agent_env = data.get("env", {})
-        final_env = {**persisted_agent_env, **self.env} # Current workspace env overrides anything, including persisted CWD
+        final_env = {**self.env, **persisted_agent_env}
 
         loaded_agent = Agent(
             model=data["model"],
@@ -174,7 +175,7 @@ class Workspace:
         return ids[:limit] if limit is not None else ids
 
     def add_thread(self, *, thread: Thread, id: str) -> None:
-        thread.env = {**thread.env, **self.env} # Merge with current workspace env
+        thread.env = {**self.env, **thread.env} # Merge with current workspace env
         thread.workspace = self
         thread.id = id
         self._save_json(self._thread_path(id), thread.json())
@@ -187,7 +188,7 @@ class Workspace:
         messages = [ChatMessage(**m) for m in data["messages"]]
         
         persisted_thread_env = data.get("env", {})
-        final_env = {**persisted_thread_env, **self.env} # Current workspace env overrides
+        final_env = {**self.env, **persisted_thread_env}
 
         thread_obj = Thread(
             model=data["model"],

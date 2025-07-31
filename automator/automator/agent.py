@@ -5,6 +5,7 @@ from contextlib import AsyncExitStack
 from uuid import uuid4
 import json
 import logging
+from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -302,10 +303,11 @@ class Thread:
         for sub_thread_instance in self._threads.values(): await sub_thread_instance.cleanup()
         await self.exit_stack.aclose()
     
-    async def _add_message(self, message):
+    async def _add_message(self, message, apply_hooks=False):
         """Add messages, apply hooks, save if needed"""
         self.messages.append(message)
-        await self.apply_hooks()
+        if apply_hooks:
+            await self.apply_hooks()
         if self.workspace:
             self.workspace.add_thread(thread=self, id=self.id)
         return message
@@ -353,7 +355,7 @@ class Thread:
             tool_results_message, done = await self.process_message(llm_response_message)
             if done:
                 break
-            yield await self._add_message(tool_results_message); await asyncio.sleep(0.1)
+            yield await self._add_message(tool_results_message, apply_hooks=True); await asyncio.sleep(0.1)
     
     async def process_message(self, msg_w_tool_uses: ChatMessage) -> Tuple[ChatMessage, bool]:
         tool_use_blocks = [b for b in msg_w_tool_uses.content if isinstance(b, ToolUseBlock)]
@@ -410,6 +412,10 @@ class Thread:
         if len(words) > max_words:
             return " ".join(words[:max_words]) + "..."
         return full_text
+    
+    @property
+    def home(self):
+        return Path(self.env['CWD'])
 
     def json(self):
         return {"model": self.model, "messages": [m.model_dump() for m in self.messages], "tools": self._tools,
