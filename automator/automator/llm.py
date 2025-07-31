@@ -1,15 +1,18 @@
-from typing import List, Callable
+from typing import List, Callable, Type, Union
 import os
 import anthropic
 import openai
 import json
 import backoff
 from typing import Dict, Any
+from uuid import uuid4
+from pydantic import BaseModel
 from automator.dtypes import (
     ChatMessage,
     MessageRole,
     anthropic_format,
     openai_format,
+    genai_format,
     ToolUseBlock,
     ToolResultBlock,
     TextBlock,
@@ -27,7 +30,10 @@ class Provider:
 
 
 anthr = anthropic.AsyncAnthropic()
-async def get_response_anthropic(messages, tools, **kwargs):
+async def get_response_anthropic(messages, tools, response_format=None, **kwargs):
+    if response_format is not None:
+        raise NotImplementedError("Structured output is not supported for Anthropic models")
+    
     kwargs = anthropic_format(messages, tools, **kwargs)
     kwargs['timeout'] = 599  # Set a timeout of 10 minutes for the request
     resp = await anthr.messages.create(**kwargs)
@@ -46,7 +52,7 @@ async def get_response_anthropic(messages, tools, **kwargs):
 # ---------------------------------------------------------------------------
 
 def get_response_factory(oai: openai.AsyncOpenAI):
-    async def get_response_openai(messages, tools, **kwargs):
+    async def get_response_openai(messages, tools, response_format=None, **kwargs):
         """Return a ``ChatMessage`` from OpenAI's Chat Completions endpoint.
 
         The *complete* message history is forwarded to the API.  The assistant's
@@ -54,25 +60,33 @@ def get_response_factory(oai: openai.AsyncOpenAI):
         the rest of the codebase can stay provider-agnostic.
         """
 
-        # Translate our internal representation into the OpenAI payload.
         kwargs = openai_format(messages, tools, **kwargs)
 
-        # The model name is required by the SDK.  It is included in ``kwargs`` as
-        # passed in by the caller.  We raise a clear exception if it is missing –
-        # this indicates a programming error further up the stack.
         if "model" not in kwargs:
             raise ValueError("'model' is required for OpenAI completions")
 
-        try:
+        # Handle structured output
+        if response_format is not None:
+            if isinstance(response_format, type) and issubclass(response_format, BaseModel):
+                # Use the parse method for Pydantic models
+                resp = await oai.chat.completions.parse(response_format=response_format, **kwargs)
+                
+                blocks = []
+                if resp.choices[0].message.content:
+                    blocks.append(TextBlock(text=resp.choices[0].message.content))
+                
+                # Create response and add parsed attribute
+                response = ChatMessage(role=MessageRole.assistant, content=blocks)
+                response.parsed = resp.choices[0].message.parsed
+                return response
+            else:
+                # Handle other response formats
+                kwargs["response_format"] = response_format
+                resp = await oai.chat.completions.create(**kwargs)
+        else:
             resp = await oai.chat.completions.create(**kwargs)
-        except Exception as e:
-            print(e)
-            breakpoint()
-        # We do **not** request streaming responses because the surrounding code
-        # expects the assistant's answer to be available in one go.  The first –
-        # and only – choice therefore contains the message we need.
+        
         message = resp.choices[0].message
-
         blocks = []
 
         # Text
@@ -106,13 +120,7 @@ def get_response_factory(oai: openai.AsyncOpenAI):
         # Tool calls
         if message.tool_calls:
             for call in message.tool_calls:
-                arguments: Dict[str, Any]
-                try:
-                    arguments = json.loads(call.function.arguments)
-                except Exception:
-                    # The arguments string is not valid JSON – fall back to the
-                    # raw string to avoid data loss.
-                    arguments = {"_raw_arguments": call.function.arguments}
+                arguments: Dict[str, Any] = json.loads(call.function.arguments)
 
                 blocks.append(
                     ToolUseBlock(
@@ -128,12 +136,6 @@ def get_response_factory(oai: openai.AsyncOpenAI):
 
 
 _available_anthropic_models: List[str]
-
-# Fetching the model list requires internet connectivity.  In offline
-# environments the call raises an ``APIConnectionError``.  Falling back to
-# an *empty* list keeps imports functional without penalising
-# functionality when the network is available.
-
 try:
     _available_anthropic_models = [m.id for m in anthropic.Anthropic().models.list(limit=1000).data]
 except Exception:  # broad – we really do not care, we only need a list
@@ -177,6 +179,120 @@ if 'OPENAI_API_KEY' in os.environ:
     )
 
 
+# ---------------------------------------------------------------------------
+# Register Google GenAI models
+# ---------------------------------------------------------------------------
+
+async def get_response_genai(messages, tools, response_format=None, **kwargs):
+    """Return a ChatMessage from Google GenAI generate_content endpoint."""
+    try:
+        from google import genai
+        from google.genai import types as genai_types
+    except ImportError:
+        raise ImportError("google-genai package is required for Google GenAI support. Install with: pip install google-genai")
+    
+    # Create client
+    api_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY or GOOGLE_API_KEY environment variable is required")
+    
+    client = genai.Client(api_key=api_key)
+    
+    # Format the request  
+    request_kwargs = genai_format(messages, tools)
+    
+    # Filter out parameters that don't belong in GenerateContentConfig
+    config_params = {}
+    for k, v in kwargs.items():
+        if k not in ['contents', 'tools', 'system_instruction', 'model']:
+            # Map common parameters
+            if k == 'max_tokens':
+                config_params['max_output_tokens'] = v
+            elif k == 'temperature':
+                config_params['temperature'] = v
+            elif k == 'top_p':
+                config_params['top_p'] = v
+            # Add other known parameters as needed
+    
+    # Handle structured output
+    if response_format is not None:
+        if isinstance(response_format, type) and issubclass(response_format, BaseModel):
+            config_params.update({
+                'response_mime_type': 'application/json',
+                'response_schema': response_format,
+            })
+    
+    # Add tools to config if present
+    if 'tools' in request_kwargs and request_kwargs['tools']:
+        config_params['tools'] = request_kwargs['tools']
+    
+    # Add system instruction to config if present  
+    if 'system_instruction' in request_kwargs and request_kwargs['system_instruction']:
+        config_params['system_instruction'] = request_kwargs['system_instruction']
+    
+    config = genai_types.GenerateContentConfig(**config_params) if config_params else None
+    
+    # Make the request
+    response = await client.aio.models.generate_content(
+        model=kwargs.get('model', 'gemini-2.0-flash-001'),
+        contents=request_kwargs['contents'],
+        config=config
+    )
+    
+    # Convert response back to our format
+    blocks = []
+    
+    if response.text:
+        blocks.append(TextBlock(text=response.text))
+    
+    # Handle function calls if present
+    if hasattr(response, 'function_calls') and response.function_calls:
+        for func_call in response.function_calls:
+            # Generate ID if not present
+            func_id = getattr(func_call, 'id', None) or str(uuid4())
+            # Get function call args
+            if hasattr(func_call, 'function_call') and func_call.function_call:
+                func_args = func_call.function_call.args or {}
+            else:
+                func_args = getattr(func_call, 'args', {})
+            
+            blocks.append(ToolUseBlock(
+                id=func_id,
+                name=func_call.name,
+                input=func_args
+            ))
+    
+    # Create response object
+    chat_response = ChatMessage(role=MessageRole.assistant, content=blocks)
+    
+    # Add parsed result if structured output was used
+    if response_format is not None and isinstance(response_format, type) and issubclass(response_format, BaseModel):
+        if hasattr(response, 'parsed') and response.parsed:
+            chat_response.parsed = response.parsed
+        elif response.text:
+            # Try to parse JSON response manually
+            try:
+                import json
+                parsed_data = json.loads(response.text)
+                chat_response.parsed = response_format(**parsed_data)
+            except Exception:
+                pass  # If parsing fails, just return the text
+    
+    return chat_response
+
+
+if 'GEMINI_API_KEY' in os.environ or 'GOOGLE_API_KEY' in os.environ:
+    providers.append(
+        Provider(
+            get_response_genai,
+            models=[
+                'gemini-2.5-pro',
+                'gemini-2.5-flash'
+            ],
+        )
+    )
+
+
 @backoff.on_exception(
     wait_gen=backoff.expo,
     exception=(
@@ -194,17 +310,17 @@ if 'OPENAI_API_KEY' in os.environ:
     factor=1.5,
     on_backoff=lambda details: print(f"Retrying... {details['exception']}")
 )
-async def get_response(model, messages, **kwargs):
+async def get_response(model, messages, tools=None, response_format=None, **kwargs):
     all_models = []
     for provider in providers:
         all_models.extend(provider.models)
         if model in provider.models:
-            response = await provider.get_response(model=model, messages=messages, **kwargs)
+            response = await provider.get_response(model=model, messages=messages, tools=tools, response_format=response_format, **kwargs)
             if len(response.content) == 0:
                 messages = messages + [
                     ChatMessage(role=MessageRole.user, content=[TextBlock(text="Please continue.")])
                 ]
-                response = await provider.get_response(model=model, messages=messages, **kwargs)
+                response = await provider.get_response(model=model, messages=messages, tools=tools, response_format=response_format, **kwargs)
             assert len(response.content) > 0, "Response content is empty"
             return response
     raise ValueError(f"Model '{model}' not supported by any provider. Supported models: {all_models}")

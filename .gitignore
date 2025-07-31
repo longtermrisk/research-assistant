@@ -195,3 +195,4 @@ automator/resources/
 automator/prompts/shift_planner.yaml
 rag/
 .ragignore
+.knowledge

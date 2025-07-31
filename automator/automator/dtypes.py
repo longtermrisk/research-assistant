@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Union
 from uuid import uuid4
@@ -135,6 +136,10 @@ class ChatMessage(BaseModel):
     role: MessageRole
     content: List[ContentBlock]
     meta: Dict[str, Any] = Field(default_factory=dict)
+    
+    class Config:
+        # Allow additional attributes for structured output
+        extra = "allow"
 
     @field_validator("role", mode="before")
     @classmethod
@@ -199,7 +204,7 @@ def anthropic_format(messages, tools, **kwargs) -> Dict[str, Any]:
 
     kwargs['messages'] = chat_messages
     if tools:
-        kwargs["tools"] = [tool.definition.anthropic_format for tool in tools]
+        kwargs["tools"] = [tool.anthropic_format for tool in tools]
     if system_message:
         kwargs["system"] = system_message
     return kwargs
@@ -238,6 +243,84 @@ def _text_and_image_to_openai_parts(blocks: List[ContentBlock]):
     if len(oai_parts) == 1 and oai_parts[0]["type"] == "text":
         return oai_parts[0]["text"]  # type: ignore[return-value]
     return oai_parts
+
+
+# ---------------------------------------------------------------------------
+# Google GenAI formatting helpers  
+# ---------------------------------------------------------------------------
+
+def genai_format(messages, tools, **kwargs) -> Dict[str, Any]:
+    """Convert our internal chat representation into a payload suitable for
+    Google GenAI generate_content.
+    """
+    from google.genai import types as genai_types
+    
+    # Convert messages to GenAI format
+    genai_contents = []
+    system_instruction = None
+    
+    for msg in messages:
+        if msg.role == MessageRole.system:
+            # System messages become system_instruction
+            system_instruction = "\n".join([block.text for block in msg.content if isinstance(block, TextBlock)])
+            continue
+            
+        # Convert role
+        if msg.role == MessageRole.user:
+            role = "user"
+        elif msg.role == MessageRole.assistant:
+            role = "model"
+        else:
+            role = "user"  # fallback
+            
+        # Convert content blocks
+        parts = []
+        for block in msg.content:
+            if isinstance(block, TextBlock):
+                parts.append(genai_types.Part.from_text(text=block.text))
+            elif isinstance(block, ImageBlock):
+                # Convert base64 image to GenAI format
+                data_url = f"data:{block.source.media_type};base64,{block.source.data}"
+                parts.append(genai_types.Part.from_uri(file_uri=data_url, mime_type=block.source.media_type))
+            elif isinstance(block, ToolUseBlock):
+                parts.append(genai_types.Part.from_function_call(
+                    name=block.name,
+                    args=block.input or {}
+                ))
+            elif isinstance(block, ToolResultBlock):
+                # For tool results, add as text parts
+                for content_block in block.content:
+                    if isinstance(content_block, TextBlock):
+                        parts.append(genai_types.Part.from_text(text=content_block.text))
+        
+        if parts:
+            if role == "user":
+                genai_contents.append(genai_types.UserContent(parts=parts))
+            else:
+                genai_contents.append(genai_types.ModelContent(parts=parts))
+    
+    # Build the request
+    request = {
+        "contents": genai_contents,
+        **kwargs
+    }
+    
+    if system_instruction:
+        request["system_instruction"] = system_instruction
+        
+    if tools:
+        # Convert tools to GenAI format
+        genai_tools = []
+        for tool in tools:
+            func_decl = genai_types.FunctionDeclaration(
+                name=tool.name,
+                description=tool.description,
+                parameters_json_schema=tool.input_schema
+            )
+            genai_tools.append(genai_types.Tool(function_declarations=[func_decl]))
+        request["tools"] = genai_tools
+    
+    return request
 
 
 def openai_format(messages, tools, **kwargs) -> Dict[str, Any]:
@@ -327,7 +410,7 @@ def openai_format(messages, tools, **kwargs) -> Dict[str, Any]:
     kwargs["messages"] = oai_messages
 
     if tools:
-        kwargs["tools"] = [t.definition.openai_format for t in tools]
+        kwargs["tools"] = [t.openai_format for t in tools]
     
     # Special treatments for reasoning models
     if kwargs.get("model", "").startswith("o"):

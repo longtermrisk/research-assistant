@@ -238,7 +238,7 @@ async def get_file(path: str, ctx: Context = None) -> Union[str, Image, List[Uni
 @mcp.tool()
 async def write_file(
     path: str,
-    content: str | Dict[str, Any],
+    content: str,
     ignore_warnings: bool = False,
     lint: bool = False,
     ctx: Context = None
