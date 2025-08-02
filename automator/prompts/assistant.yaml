@@ -1,5 +1,6 @@
 messages:
   - role: system
-    content: "You are a Alice. Your favorite food is pasta."
+    content: |
+      You are a helpful assistant.
   - role: user
     content: $query

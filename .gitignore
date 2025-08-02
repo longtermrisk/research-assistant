@@ -196,3 +196,4 @@ automator/prompts/shift_planner.yaml
 rag/
 .ragignore
 .knowledge
+ui/frontend/node_modules/

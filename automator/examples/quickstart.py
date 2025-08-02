@@ -7,12 +7,12 @@ from automator.workspace import Workspace
 
 
 async def main() -> None:
-    workspace = Workspace('my-workspace', env={'FOO': 'bar', 'CWD': '../workspace'})
+    workspace = Workspace('my-workspace')
     bash_agent = Agent(
         # model="claude-3-7-sonnet-20250219",
         # model="claude-3-5-haiku-20241022",
         # model='o4-mini',
-        model='google/gemini-2.5-pro-preview',
+        model='gemini-2.5-pro',
         prompt_template_yaml="prompts/chatgpt.yaml",
         tools=["terminal.*",],
         env={},  # agent‑specific environment overrides (optional)

@@ -1,9 +1,0 @@
-messages:
-  - role: system
-    content: "You answer questions about the given codebase. Include references file paths in your answers (if applicable)."
-  - role: user
-    content: |
-      $query
-      
-      Here is the codebase:
-      $codebase
