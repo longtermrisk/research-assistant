@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 import yaml
 
 from automator.utils import dict_recursive
+from automator.xml_utils import dump_xml, get_first_element, parse_xml
 
 
 class ToolDefinition(BaseModel):
@@ -38,6 +39,11 @@ class ToolDefinition(BaseModel):
             },
         }
         return oai_definition
+    
+    @property
+    def xml_format(self):
+        """Convert the definition to XML format"""
+        return dump_xml(tool=self.model_dump())
 
 class SubagentToolDefinition(ToolDefinition):
     input_schema: Dict[str, Any] = Field(
@@ -64,6 +70,18 @@ class TextBlock(BaseModel):
     meta: Dict[str, Any] = Field(default_factory=dict)
 
     def anthropic_format(self) -> Dict[str, Any]:
+        return {
+            "type": "text",
+            "text": self.text,
+        }
+    
+    def openai_format(self) -> Dict[str, Any]:
+        return {
+            "type": "text",
+            "text": self.text,
+        }
+    
+    def xml_format(self) -> str:
         return {
             "type": "text",
             "text": self.text,
@@ -97,6 +115,16 @@ class ImageBlock(BaseModel):
             "type": "image",
             "source": self.source.model_dump()
         }
+    
+    def openai_format(self) -> Dict[str, Any]:
+        data_url = f"data:{self.source.media_type};base64,{self.source.data}"
+        return {
+            "type": "image_url",
+            "image_url": {"url": data_url}
+        }
+    
+    def xml_format(self) -> str:
+        return {"type": "text", "text": "(image)"}
 
 
 class ToolUseBlock(BaseModel):
@@ -113,6 +141,24 @@ class ToolUseBlock(BaseModel):
             "name": self.name,
             "input": self.input,
         }
+    
+    def openai_format(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "arguments": json.dumps(self.input or {}),
+            },
+        }
+    
+    def xml_format(self) -> str:
+        return dict(type='text', text=dump_xml(
+            tool_use=dict(
+                name=self.name, 
+                input=self.input
+            )
+        ))
 
 
 class ToolResultBlock(BaseModel):
@@ -127,6 +173,24 @@ class ToolResultBlock(BaseModel):
             "tool_use_id": self.tool_use_id,
             "content": [block.anthropic_format() for block in self.content],
         }
+    
+    def openai_format(self) -> Dict[str, Any]:
+        # Concatenate all text parts inside the tool result
+        text_parts = [b.text for b in self.content if isinstance(b, TextBlock)]
+        content_str = "\n".join(text_parts) if text_parts else ""
+        return {
+            "role": "tool",
+            "tool_call_id": self.tool_use_id,
+            "content": content_str,
+        }
+    
+    def xml_format(self) -> str:
+        output = "\n".join([
+            block.xml_format()['text'] if hasattr(block, 'xml_format') 
+            else f'Skipped: {block.type}' 
+            for block in self.content
+        ])
+        return dict(type='text', text=dump_xml(tool_result=dict(output=output)))
 
 
 ContentBlock = Union[TextBlock, ImageBlock, ToolUseBlock, ToolResultBlock]
@@ -157,6 +221,269 @@ class ChatMessage(BaseModel):
 
         content = [c.anthropic_format() for c in self.content]
         return {"role": self.role.value, "content": content}
+    
+    def openai_format(self) -> Dict[str, Any]:
+        """Convert message to OpenAI format, handling tool calls and results properly"""
+        if isinstance(self.content, str):
+            return {"role": self.role.value, "content": self.content}
+        
+        # Handle tool results in user messages - they need to be separate messages
+        tool_results = []
+        image_parts = []
+        non_tool_content = []
+        
+        for block in self.content:
+            if isinstance(block, ToolResultBlock):
+                tool_results.append(block.openai_format())
+                # Extract images from tool results for separate user message
+                for content_block in block.content:
+                    if isinstance(content_block, ImageBlock):
+                        image_parts.append(content_block)
+            else:
+                non_tool_content.append(block)
+        
+        messages = []
+        
+        # Add tool result messages first
+        messages.extend(tool_results)
+        
+        # Add image parts as separate user message if any
+        if image_parts:
+            messages.append({
+                "role": "user",
+                "content": [block.openai_format() for block in image_parts]
+            })
+        
+        # Handle main message content
+        if non_tool_content or (not tool_results and not image_parts):
+            role = self.role.value
+            tool_calls = []
+            text_and_images = []
+            
+            for block in non_tool_content:
+                if isinstance(block, ToolUseBlock):
+                    tool_calls.append(block.openai_format())
+                else:
+                    text_and_images.append(block)
+            
+            oai_msg = {"role": role}
+            
+            if text_and_images:
+                # Convert to OpenAI multimodal format
+                oai_parts = []
+                for block in text_and_images:
+                    if isinstance(block, TextBlock):
+                        oai_parts.append({"type": "text", "text": block.text})
+                    elif isinstance(block, ImageBlock):
+                        oai_parts.append(block.openai_format())
+                
+                # If only one text block, return as string
+                if len(oai_parts) == 1 and oai_parts[0]["type"] == "text":
+                    oai_msg["content"] = oai_parts[0]["text"]
+                else:
+                    oai_msg["content"] = oai_parts
+            else:
+                oai_msg["content"] = None
+            
+            if tool_calls:
+                oai_msg["tool_calls"] = tool_calls
+            
+            if oai_msg["content"] is not None or tool_calls:
+                messages.append(oai_msg)
+        
+        return messages if len(messages) > 1 else (messages[0] if messages else {"role": self.role.value, "content": ""})
+    
+    def xml_format(self, keep_images: bool = True) -> str:
+        """Convert message content to XML format"""
+        if isinstance(self.content, str):
+            return self.content
+        
+        content_parts = []
+        for block in self.content:
+            if isinstance(block, ImageBlock) and not keep_images:
+                continue
+            if hasattr(block, 'xml_format'):
+                content_parts.append(block.xml_format())
+            else:
+                content_parts.append(str(block))
+        
+        return dict(type='text', content=content_parts)
+    
+    @staticmethod
+    def from_openai(message, **kwargs) -> "ChatMessage":
+        """Convert OpenAI message response to ChatMessage"""
+        blocks = []
+
+        # Handle content
+        if message.content:
+            if isinstance(message.content, str):
+                if message.content.strip():
+                    blocks.append(TextBlock(text=message.content))
+            else:
+                # Multi-modal response
+                for part in message.content:
+                    if part["type"] == "text":
+                        blocks.append(TextBlock(text=part["text"]))
+                    elif part["type"] == "image_url":
+                        url = part["image_url"]["url"]
+                        if url.startswith("data:"):
+                            header, b64_data = url.split(",", 1)
+                            media_type = header[len("data:"):header.index(";")]
+                            blocks.append(ImageBlock.from_base64(data=b64_data, media_type=media_type))
+
+        # Handle tool calls
+        if hasattr(message, 'tool_calls') and message.tool_calls:
+            for call in message.tool_calls:
+                import json
+                blocks.append(ToolUseBlock(
+                    id=call.id,
+                    name=call.function.name,
+                    input=json.loads(call.function.arguments),
+                ))
+
+        return ChatMessage(role=MessageRole.assistant, content=blocks)
+    
+    @staticmethod
+    def from_anthropic(response_content, **kwargs) -> "ChatMessage":
+        """Convert Anthropic response content to ChatMessage"""
+        blocks = []
+        for item in response_content:
+            if item.type == "text":
+                blocks.append(TextBlock(text=item.text))
+            elif item.type == "tool_use":
+                blocks.append(ToolUseBlock(id=item.id, name=item.name, input=item.input))
+            else:
+                raise ValueError(f"Unknown block type: {item.type}")
+        
+        return ChatMessage(role=MessageRole.assistant, content=blocks)
+    
+    @staticmethod  
+    def from_genai(response, **kwargs) -> "ChatMessage":
+        """Convert Google GenAI response to ChatMessage"""
+        blocks = []
+        
+        if response.text:
+            blocks.append(TextBlock(text=response.text))
+        
+        # Handle function calls
+        if hasattr(response, 'function_calls') and response.function_calls:
+            for func_call in response.function_calls:
+                func_id = getattr(func_call, 'id', None) or str(uuid4())
+                func_args = getattr(func_call, 'args', {})
+                blocks.append(ToolUseBlock(id=func_id, name=func_call.name, input=func_args))
+        
+        return ChatMessage(role=MessageRole.assistant, content=blocks)
+
+    @staticmethod
+    def from_xml_format(message_dict: Dict[str, Any]) -> "ChatMessage":
+        """Parse XML format back to ChatMessage"""
+        content_blocks = []
+        role = MessageRole[message_dict["role"]]
+        content = message_dict["content"]
+        
+        if isinstance(content, str):
+            # Parse XML content for tool use blocks
+            while content:
+                before, tool_use_text, content = get_first_element(content, "tool_use")
+                
+                if before.strip():
+                    content_blocks.append(TextBlock(text=before))
+                
+                if tool_use_text:
+                    try:
+                        tool_call = parse_xml(
+                            tool_use_text,
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "input": {"type": "string"},  # Parse as string first, then convert
+                                    "id": {
+                                        "type": "string", 
+                                        "default": f"toolu-{uuid4().hex[:8]}"
+                                    },
+                                },
+                            },
+                        )
+                        # Try to parse input as JSON if it's a string
+                        if isinstance(tool_call.get("input"), str):
+                            try:
+                                import json
+                                tool_call["input"] = json.loads(tool_call["input"])
+                            except:
+                                # If JSON parsing fails, try XML parsing
+                                input_text = tool_call["input"]
+                                input_dict = {}
+                                
+                                # Extract all XML elements from input
+                                remaining_text = input_text
+                                while remaining_text:
+                                    found_element = False
+                                    # Try common parameter names
+                                    for param in ["expression", "query", "param", "value", "text", "message", "content", "data"]:
+                                        before, element_text, after = get_first_element(remaining_text, param)
+                                        if element_text is not None:
+                                            input_dict[param] = element_text.strip()
+                                            remaining_text = before + after
+                                            found_element = True
+                                            break
+                                    
+                                    if not found_element:
+                                        break
+                                
+                                if input_dict:
+                                    tool_call["input"] = input_dict
+                                else:
+                                    # If no XML elements found, keep as string
+                                    tool_call["input"] = {"content": input_text}
+                        content_blocks.append(
+                            ToolUseBlock(
+                                id=tool_call.get("id", f"toolu-{uuid4().hex[:8]}"),
+                                input=tool_call.get("input"),
+                                name=tool_call["name"],
+                            )
+                        )
+                    except Exception as e:
+                        # If parsing fails, treat as text
+                        content_blocks.append(TextBlock(text=f"<tool_use>{tool_use_text}</tool_use>"))
+                
+                if not tool_use_text and not before:
+                    break
+            
+            # If there's remaining content, add as text block
+            if content.strip():
+                content_blocks.append(TextBlock(text=content))
+        
+        else:
+            # Handle list of content blocks
+            for block in content:
+                if isinstance(block, dict):
+                    if block.get("type") == "text":
+                        content_blocks.append(TextBlock(**block))
+                    elif block.get("type") == "tool_use":
+                        content_blocks.append(ToolUseBlock(**block))
+                    elif block.get("type") == "tool_result":
+                        tool_content = []
+                        for content_item in block.get("content", []):
+                            if isinstance(content_item, str):
+                                tool_content.append(TextBlock(text=content_item))
+                            elif isinstance(content_item, dict):
+                                if content_item.get("type") == "text":
+                                    tool_content.append(TextBlock(**content_item))
+                                elif content_item.get("type") == "image":
+                                    tool_content.append(ImageBlock(**content_item))
+                        content_blocks.append(ToolResultBlock(
+                            tool_use_id=block["tool_use_id"],
+                            content=tool_content
+                        ))
+                    elif block.get("type") == "image":
+                        content_blocks.append(ImageBlock(**block))
+        
+        return ChatMessage(
+            role=role, 
+            content=content_blocks, 
+            meta=message_dict.get("meta", {})
+        )
 
 
 class PromptTemplate(BaseModel):
@@ -192,12 +519,17 @@ class PromptTemplate(BaseModel):
         return [ChatMessage(**msg) for msg in messages]
 
 
+# ---------------------------------------------------------------------------
+# Format conversion functions for different providers
+# ---------------------------------------------------------------------------
+
 def anthropic_format(messages, tools, **kwargs) -> Dict[str, Any]:
+    """Convert our internal chat representation into a payload suitable for Anthropic."""
     system_message = None
     chat_messages = []
 
     if len(messages) > 0 and messages[0].role == MessageRole.system:
-        system_message = "\n".join([block.text for block in messages[0].content])
+        system_message = "\n".join([block.text for block in messages[0].content if isinstance(block, TextBlock)])
         chat_messages = [msg.anthropic_format() for msg in messages[1:]]
     else:
         chat_messages = [msg.anthropic_format() for msg in messages]
@@ -210,50 +542,37 @@ def anthropic_format(messages, tools, **kwargs) -> Dict[str, Any]:
     return kwargs
 
 
-# ---------------------------------------------------------------------------
-# OpenAI formatting helpers
-# ---------------------------------------------------------------------------
+def openai_format(messages, tools, **kwargs) -> Dict[str, Any]:
+    """Convert our internal chat representation into a payload suitable for OpenAI."""
+    oai_messages = []
 
+    for msg in messages:
+        formatted = msg.openai_format()
+        if isinstance(formatted, list):
+            oai_messages.extend(formatted)
+        else:
+            oai_messages.append(formatted)
 
-def _text_and_image_to_openai_parts(blocks: List[ContentBlock]):
-    """Convert a list of TextBlock/ImageBlock objects into the OpenAI multimodal
-    content format.
+    kwargs["messages"] = oai_messages
 
-    For text-only messages the caller should unwrap the single string to keep
-    the payload small; returning a list is only required when the message is
-    truly multi-modal (i.e. contains images).
-    """
+    if tools:
+        kwargs["tools"] = [t.openai_format for t in tools]
+    
+    # Special treatments for reasoning models
+    if kwargs.get("model", "").startswith("o"):
+        if 'max_tokens' in kwargs:
+            kwargs['max_completion_tokens'] = kwargs.pop('max_tokens')
+        kwargs.pop('temperature', None)
 
-    oai_parts: List[Dict[str, Any]] = []
-    for blk in blocks:
-        if isinstance(blk, TextBlock):
-            oai_parts.append({"type": "text", "text": blk.text})
-        elif isinstance(blk, ImageBlock):
-            # OpenAI expects the image to be provided through the ``image_url``
-            # field.  When the binary is already base64-encoded we can simply
-            # prefix it with the media-type data-URL scheme.
-            data_url = f"data:{blk.source.media_type};base64,{blk.source.data}"
-            oai_parts.append({"type": "image_url", "image_url": {"url": data_url}})
-        else:  # pragma: no cover – we only reference known block types
-            raise ValueError(f"Unsupported content block for OpenAI format: {blk}")
+    return kwargs
 
-    # If the message only contains a single text block we can – and should –
-    # return the plain string to match the common usage pattern of the Chat
-    # Completions API.
-    if len(oai_parts) == 1 and oai_parts[0]["type"] == "text":
-        return oai_parts[0]["text"]  # type: ignore[return-value]
-    return oai_parts
-
-
-# ---------------------------------------------------------------------------
-# Google GenAI formatting helpers  
-# ---------------------------------------------------------------------------
 
 def genai_format(messages, tools, **kwargs) -> Dict[str, Any]:
-    """Convert our internal chat representation into a payload suitable for
-    Google GenAI generate_content.
-    """
-    from google.genai import types as genai_types
+    """Convert our internal chat representation into a payload suitable for Google GenAI."""
+    try:
+        from google.genai import types as genai_types
+    except ImportError:
+        raise ImportError("google-genai package is required for Google GenAI support. Install with: pip install google-genai")
     
     # Convert messages to GenAI format
     genai_contents = []
@@ -323,99 +642,34 @@ def genai_format(messages, tools, **kwargs) -> Dict[str, Any]:
     return request
 
 
-def openai_format(messages, tools, **kwargs) -> Dict[str, Any]:
-    """Convert our internal chat representation into a payload suitable for
-    ``/chat/completions``.
-
-    The entire *message history* is always included – callers are responsible
-    for trimming if required.
-    """
-
-    oai_messages: List[Dict[str, Any]] = []
-
-    for msg in messages:
-        # Tool results are wrapped inside a *user* message in the internal
-        # representation.  For OpenAI we need to expand each tool result into
-        # its own ``role == tool`` message so that the assistant can pick them
-        # up in the correct format.
-        non_tool_results = []
-        for c in msg.content:  # type: ignore[assignment]
-            if isinstance(c, ToolResultBlock):
-                # Concatenate all text parts inside the tool result.  The
-                # OpenAI spec expects a *single* string.
-                text_parts = [b.text for b in c.content if isinstance(b, TextBlock)]
-                content_str = "\n".join(text_parts) if text_parts else ""
-                oai_messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": c.tool_use_id,
-                        "content": content_str,
-                    }
-                )
-                # Move all image parts into a new user messages
-                # (OpenAI does not support image URLs in tool result messages).
-                image_parts = [
-                    b for b in c.content if isinstance(b, ImageBlock)
-                ]
-                if image_parts:
-                    oai_messages.append(
-                        {
-                            "role": "user",
-                            "content": _text_and_image_to_openai_parts(image_parts),
-                        }
-                    )
-            else:
-                non_tool_results.append(c)
-        
-        # Normal user / assistant / system messages
-        role = msg.role.value
-
-        # Assistant messages may include tool calls.  Those need to go into
-        # the ``tool_calls`` field.
-        tool_calls = []
-        text_and_images: List[ContentBlock] = []
-
-        for blk in non_tool_results:
-            if isinstance(blk, ToolUseBlock):
-                tool_calls.append(
-                    {
-                        "id": blk.id,
-                        "type": "function",
-                        "function": {
-                            "name": blk.name,
-                            "arguments": json.dumps(blk.input or {}),
-                        },
-                    }
-                )
-            else:
-                text_and_images.append(blk)
-
-        oai_msg: Dict[str, Any] = {"role": role}
-
-        if text_and_images:
-            oai_msg["content"] = _text_and_image_to_openai_parts(text_and_images)
-        else:
-            # When the assistant triggers only a tool call the content must be
-            # explicitly set to *None*.
-            oai_msg["content"] = None
-
-        if tool_calls:
-            oai_msg["tool_calls"] = tool_calls
-
-        if oai_msg["content"] is None and not tool_calls:
-            # If the message has no content and no tool calls, we skip it
-            continue
-        oai_messages.append(oai_msg)
-
-    kwargs["messages"] = oai_messages
-
+def xml_format(messages, tools, keep_images: bool = True, **kwargs) -> Dict[str, Any]:
+    """Convert our internal chat representation into XML format."""
     if tools:
-        kwargs["tools"] = [t.openai_format for t in tools]
-    
-    # Special treatments for reasoning models
-    if kwargs.get("model", "").startswith("o"):
-        if 'max_tokens' in kwargs:
-            kwargs['max_completion_tokens'] = kwargs.pop('max_tokens')
-        kwargs.pop('temperature', None)
+        # Add system message with tool definitions if tools are provided
+        system_msg = ""
+        if messages and messages[0].role == MessageRole.system:
+            system_msg = messages[0].xml_format(keep_images=keep_images)
+            messages = messages[1:]
 
-    return kwargs
+        definitions = "\n".join([
+            tool.xml_format for tool in tools
+        ])
+
+        system_msg += f"\n\nUse one of the available tools to choose an action.\n{definitions}\n\n"
+        system_msg += "Respond in valid XML in order to call a tool, for example:\n\n<tool_use>\n  <name>tool_name</name>\n  <input>\n    <key>value</key>\n  </input>\n</tool_use>\n\n"
+        
+        system_message = ChatMessage(
+            role=MessageRole.system, 
+            content=[TextBlock(text=system_msg)]
+        )
+        messages = [system_message] + messages
+
+    return {
+        "messages": [
+            {
+                "role": msg.role.value if msg.role.value in ["system", "user", "assistant"] else "user",
+                "content": msg.xml_format(keep_images=keep_images)
+            }
+            for msg in messages
+        ]
+    }

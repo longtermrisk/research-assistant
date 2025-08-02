@@ -178,4 +178,5 @@ pyrightconfig.json
 .logs
 *.private
 
-frontend/node_modules
+ui/frontend/node_modules/
+ui/frontend/.vite/

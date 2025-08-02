@@ -13,7 +13,7 @@ const AgentManagementView: React.FC = () => {
 
   const [showCreateForm, setShowCreateForm] = useState<boolean>(false);
   
-  const initialDefaultModel = 'claude-3-7-sonnet-20250219';
+  const initialDefaultModel = 'claude-sonnet-4-20250514';
   const initialNewAgentState: Partial<AgentCreatePayload> = {
     id: '',
     model: initialDefaultModel,

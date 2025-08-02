@@ -164,7 +164,8 @@ class Workspace:
             as_tool=data.get("as_tool"),
             workspace=self, # Assign this workspace instance
             id=id,
-            prompt_template_vars=data.get("prompt_template_vars")
+            prompt_template_vars=data.get("prompt_template_vars"),
+            hooks=data.get("hooks", [])
         )
         return loaded_agent
 

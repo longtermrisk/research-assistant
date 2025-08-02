@@ -22,5 +22,5 @@ Automator is an MCP-based LLM agent system that enables creating and orchestrati
 - `automator/hooks.py` - Pre/post-processing hooks for agent interactions
 
 ## UI
-- `automator/ui/api` - fastapi based backend (start via `cd ui && uvicorn api.main:app --port 8000`)
-- `automator/frontend` - vite frontend (start via `cd frontend && npm run dev`)
+- `ui/api` - fastapi based backend (start via `cd ui && uvicorn api.main:app --port 8000`)
+- `ui/frontend` - vite frontend (start via `cd ui/frontend && npm run dev`)

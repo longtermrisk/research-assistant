@@ -111,6 +111,21 @@ async def test_structured_output():
         except Exception as e:
             print(f"Anthropic structured error: {e}")
 
+    if os.environ.get('GEMINI_API_KEY'):
+        try:
+            response = await get_response(
+                model="gemini-2.5-flash",
+                messages=messages,
+                tools=None,
+                response_format=CalendarEvent,
+                max_tokens=200
+            )
+            print("Gemini structured response:", response)
+            if hasattr(response, 'parsed') and response.parsed:
+                print("Parsed event:", response.parsed)
+        except Exception as e:
+            print(f"Gemini structured error: {e}")
+
 async def test_tool_usage():
     """Test tool usage"""
     print("\n=== Testing Tool Usage ===")
@@ -171,7 +186,7 @@ async def test_google_genai():
     if os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY'):
         try:
             response = await get_response(
-                model="gemini-2.0-flash-001",
+                model="gemini-2.5-flash",
                 messages=messages,
                 tools=None,
                 max_tokens=50
@@ -184,10 +199,10 @@ async def test_google_genai():
 
 async def main():
     """Run all tests"""
-    await test_basic_functionality()
+    # await test_basic_functionality()
     await test_structured_output()
-    await test_tool_usage()
-    await test_google_genai()
+    # await test_tool_usage()
+    # await test_google_genai()
 
 if __name__ == "__main__":
     asyncio.run(main())
