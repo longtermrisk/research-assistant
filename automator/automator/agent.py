@@ -250,22 +250,26 @@ class Thread:
                 transport = server_config.get('transport', 'stdio')  # Default to stdio for backward compatibility
                 
                 if transport == 'stdio':
-                    # Existing stdio implementation
                     effective_env = {**(server_config.get('env', {})), **base_env}
                     command, args = maybe_handle_docker_command(server_config['command'], server_config['args'], effective_env)
+
+                    threads_root = self.home.parent
+                    log_dir = (threads_root / "threads" / self.id)
+                    log_dir.mkdir(parents=True, exist_ok=True)
+                    server_log_fp = open(log_dir / "server.log", "a", encoding="utf-8", buffering=1)
+                    print(f"Logging to: {server_log_fp}")
+
                     params = StdioServerParameters(command=command, args=args, env=effective_env)
-                    stdio, write = await self.exit_stack.enter_async_context(stdio_client(params))
+                    stdio, write = await self.exit_stack.enter_async_context(stdio_client(params, errlog=server_log_fp))
+
                     mcp_session = await self.exit_stack.enter_async_context(ClientSession(stdio, write))
                 elif transport == 'sse':
-                    # New SSE implementation
                     url = server_config.get('url')
                     if not url:
                         raise ValueError(f"SSE transport requires 'url' in server config for {server_id}")
                     
                     headers = server_config.get('headers', {})
-                    # Add environment variables to headers if needed
                     effective_headers = {**headers}
-                    # Some SSE servers might expect auth tokens in headers
                     for key, value in {**(server_config.get('env', {})), **base_env}.items():
                         if key.upper().endswith('_TOKEN') or key.upper().endswith('_KEY'):
                             effective_headers[f'X-{key.replace("_", "-")}'] = value
