@@ -17,6 +17,9 @@ from mcp.types import TextContent
 from server import mcp
 
 
+def log_to_stderr(*args):
+    print(*args, file=sys.stderr)
+
 
 def replace_require_plotly(html_content):
     # Check if plotly require pattern exists in the HTML
@@ -208,20 +211,20 @@ class JupyterNotebook:
                         temp_dir
                     ], check=True)
                 except subprocess.CalledProcessError as e:
-                    print(f"Failed to install kernel spec: {e}")
+                    log_to_stderr(f"Failed to install kernel spec: {e}")
                     raise
         
         # Load or create notebook (rest of the initialization)
         if path and os.path.exists(path):
             with open(path, 'r', encoding='utf-8') as f:
                 self.notebook = nbformat.read(f, as_version=4)
-            print(f"Loaded notebook from {path}")
+            log_to_stderr(f"Loaded notebook from {path}")
         else:
             self.notebook = nbformat.v4.new_notebook()
             if path:
-                print(f"Path {path} not found. Created a new notebook.")
+                log_to_stderr(f"Path {path} not found. Created a new notebook.")
             else:
-                print("Created a new temporary notebook.")
+                log_to_stderr("Created a new temporary notebook.")
 
         self.km = None
         self.kc = None
@@ -258,7 +261,7 @@ class JupyterNotebook:
             # await self.client.async_start_new_kernel_client() # Might not be needed
             while not await self.kc.is_alive():
                  await asyncio.sleep(0.1)
-            print("Kernel is ready.")
+            log_to_stderr("Kernel is ready.")
 
 
     async def execute_cell(self, cell: nbformat.NotebookNode) -> None:
@@ -266,15 +269,15 @@ class JupyterNotebook:
         # Find the index dynamically - crucial if cells were added/removed
         try:
             cell_index = self.notebook.cells.index(cell)
-            print(f"Executing cell {cell_index + 1}/{len(self.notebook.cells)}")
+            log_to_stderr(f"Executing cell {cell_index + 1}/{len(self.notebook.cells)}")
             await self.client.async_execute_cell(cell, cell_index)
         except ValueError:
-            print("Error: Cell not found in the notebook's cell list.")
+            log_to_stderr("Error: Cell not found in the notebook's cell list.")
         except CellExecutionError as e:
             # Error is already stored in cell output by allow_errors=True
-            print(f"Error executing cell: {e}")
+            log_to_stderr(f"Error executing cell: {e}")
         except Exception as e:
-            print(f"An unexpected error occurred during cell execution: {e}")
+            log_to_stderr(f"An unexpected error occurred during cell execution: {e}")
             # Potentially add error info to the cell manually if needed
             error_output = nbformat.v4.new_output(
                 output_type='error',
@@ -289,19 +292,19 @@ class JupyterNotebook:
     async def execute_all_cells(self) -> None:
         """Execute all existing cells in the notebook sequentially."""
         if not self.notebook.cells:
-            print("Notebook has no cells to execute.")
+            log_to_stderr("Notebook has no cells to execute.")
             return
 
-        print(f"Executing all {len(self.notebook.cells)} existing cells...")
+        log_to_stderr(f"Executing all {len(self.notebook.cells)} existing cells...")
         # Ensure kernel is initialized before executing multiple cells
         await self.setup()
 
         for i, cell in enumerate(self.notebook.cells):
             if cell.cell_type == 'code':
                 await self.execute_cell(cell)
-            # else: # Optionally print info about non-code cells
-            #     print(f"Skipping non-code cell {i+1} ({cell.cell_type})")
-        print("Finished executing all existing cells.")
+            # else: # Optionally log_to_stderr info about non-code cells
+            #     log_to_stderr(f"Skipping non-code cell {i+1} ({cell.cell_type})")
+        log_to_stderr("Finished executing all existing cells.")
 
 
     async def execute_new_code(self, code: str) -> List[Union[TextContent, Image]]:
@@ -312,7 +315,7 @@ class JupyterNotebook:
         # Create and append the new code cell
         cell = nbformat.v4.new_code_cell(code)
         self.notebook.cells.append(cell)
-        print(f"Appended new cell {len(self.notebook.cells)}")
+        log_to_stderr(f"Appended new cell {len(self.notebook.cells)}")
 
         # Execute the newly added cell
         await self.execute_cell(cell)
@@ -321,14 +324,14 @@ class JupyterNotebook:
         results: List[Union[TextContent, Image]] = []
         
         if not hasattr(cell, 'outputs'):
-            print("Cell finished execution, no outputs generated.")
+            log_to_stderr("Cell finished execution, no outputs generated.")
             return results
 
-        print(f"Processing {len(cell.outputs)} outputs for the new cell...")
+        log_to_stderr(f"Processing {len(cell.outputs)} outputs for the new cell...")
         for output in cell.outputs:
             output_type = output.get('output_type', '')
 
-            print(output, output_type)
+            log_to_stderr(output, output_type)
 
             if output_type == 'error':
                 # Handle error output
@@ -391,30 +394,30 @@ class JupyterNotebook:
             try:
                 with open(self.path, 'w', encoding='utf-8') as f:
                     nbformat.write(self.notebook, f)
-                print(f"Notebook saved to {self.path}")
+                log_to_stderr(f"Notebook saved to {self.path}")
             except Exception as e:
-                print(f"Error saving notebook to {self.path}: {e}")
+                log_to_stderr(f"Error saving notebook to {self.path}: {e}")
         else:
-            print("No path specified for saving the notebook.")
+            log_to_stderr("No path specified for saving the notebook.")
 
     async def cleanup(self):
         """Clean up resources when done."""
         if self.client and self.client.kc:
-            print("Shutting down kernel client...")
+            log_to_stderr("Shutting down kernel client...")
             try:
                 # Use wait=True for cleaner shutdown
                 await self.client.kc.stop_channels()
                 # Shutdown the kernel managed by the kernel manager
                 if self.km and self.km.has_kernel:
-                     print("Shutting down kernel...")
+                     log_to_stderr("Shutting down kernel...")
                      await self.km.shutdown_kernel(now=True) # 'now=True' forces immediate shutdown
                      self.km = None # Clear reference
                 self.kc = None # Clear reference
                 self.client.kc = None # Ensure client knows kernel is gone
             except Exception as e:
-                print(f"Error during kernel cleanup: {e}")
+                log_to_stderr(f"Error during kernel cleanup: {e}")
         elif self.km and self.km.has_kernel: # Fallback if client wasn't fully setup
-            print("Shutting down kernel manager directly...")
+            log_to_stderr("Shutting down kernel manager directly...")
             await self.km.shutdown_kernel(now=True)
             self.km = None
 
@@ -460,14 +463,14 @@ async def jupyter(
     is_first_run_with_path = False
 
     if notebook_key in _OPEN_NOTEBOOKS:
-        print(f"Using existing notebook session for key: {notebook_key}")
+        log_to_stderr(f"Using existing notebook session for key: {notebook_key}")
         notebook = _OPEN_NOTEBOOKS[notebook_key]
         # Ensure kernel is still alive, setup if necessary (e.g., after inactivity timeout)
         if not notebook.km or not await notebook.km.is_alive():
-            print("Kernel needs setup/restart.")
+            log_to_stderr("Kernel needs setup/restart.")
             await notebook.setup()
     else:
-        print(f"Creating new notebook session for key: {notebook_key}")
+        log_to_stderr(f"Creating new notebook session for key: {notebook_key}")
         # Check if the path exists *before* creating the JupyterNotebook instance
         # This determines if we need to run existing cells
         path_existed = path is not None and os.path.exists(path)
@@ -481,11 +484,11 @@ async def jupyter(
             # If the path existed and we successfully loaded cells, run them all
             if path_existed and notebook.notebook.cells:
                 is_first_run_with_path = True # Mark this for later output formatting
-                print(f"Path '{path}' exists, executing existing cells...")
+                log_to_stderr(f"Path '{path}' exists, executing existing cells...")
                 await notebook.execute_all_cells()
             elif path: # Path provided but didn't exist or failed load (empty notebook created)
                 is_first_run_with_path = True # Treat as first run for this path key
-                print(f"New notebook created for path '{path}'.")
+                log_to_stderr(f"New notebook created for path '{path}'.")
             # No need to run existing cells if temporary or new file path
         except ValueError as e:
             return [f"Error initializing notebook: {e}"]
@@ -500,7 +503,7 @@ async def jupyter(
 
 
     # Now, execute the *new* code provided in the call
-    print(f"Executing provided code in notebook for key: {notebook_key}...")
+    log_to_stderr(f"Executing provided code in notebook for key: {notebook_key}...")
     new_cell_outputs : List[Union[TextContent, Image]] = [
         TextContent(type="text", text="", annotations={'display_html': f"<pre>{code}</pre>"})
     ]
@@ -517,30 +520,30 @@ async def jupyter(
     if path:
         try:
             notebook.save()
-            print(f"Notebook saved to {path}")
+            log_to_stderr(f"Notebook saved to {path}")
         except Exception as e:
-            print(f"Failed to save notebook to {path}: {e}")
+            log_to_stderr(f"Failed to save notebook to {path}: {e}")
 
     # Determine what to return
     if is_first_run_with_path:
         # Return the formatted content of the entire notebook
-        print("First run with path, returning entire notebook content.")
+        log_to_stderr("First run with path, returning entire notebook content.")
         title = f"# Jupyter Notebook: {path}" # Use the provided path in the title
         # Ensure the notebook object passed to formatting is the updated one
         return _format_notebook_to_blocks(notebook.notebook, title)
     else:
         # Return only the outputs of the newly executed cell
-        print("Returning output from the latest executed cell.")
+        log_to_stderr("Returning output from the latest executed cell.")
         return new_cell_outputs
 
 
 # Example of how to potentially clean up all notebooks on server shutdown
 # This would need integration into your MCP server's lifecycle management
 async def cleanup_all_notebooks():
-     print("Cleaning up all active Jupyter notebooks...")
+     log_to_stderr("Cleaning up all active Jupyter notebooks...")
      for key, notebook in list(_OPEN_NOTEBOOKS.items()): # Iterate over copy of items
-        print(f"Cleaning up notebook for key: {key}")
+        log_to_stderr(f"Cleaning up notebook for key: {key}")
         await notebook.cleanup()
         del _OPEN_NOTEBOOKS[key]
-     print("Finished cleaning up notebooks.")
+     log_to_stderr("Finished cleaning up notebooks.")
 
