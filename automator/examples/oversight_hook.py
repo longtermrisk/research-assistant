@@ -1,7 +1,7 @@
 import os
 from pydantic import BaseModel
 from automator.llm import get_response
-from automator.dtypes import ChatMessage, TextBlock, ToolUseBlock, ImageBlock, MessageRole, genai_format
+from automator.dtypes import ChatMessage, TextBlock, ToolUseBlock, ImageBlock, MessageRole, genai_format, messages_to_content_blocks
 from automator.hooks import register_hook
 
 import asyncio
@@ -22,16 +22,7 @@ Here is the rollout:
 
 def thread_to_message(thread):
     contents = [TextBlock(text=f'{instruction}\n<rollout>')]
-    for message in thread.messages:
-        contents.append(TextBlock(text=f"<{message.role}>"))
-        for block in message.content:
-            if block.type == 'text' and message.role == "assistant" and any([isinstance(block, ToolUseBlock)]):
-                continue
-            elif isinstance(block, ImageBlock):
-                contents.append(block)
-            else:
-                contents.append(TextBlock(**block.xml_format()))
-        contents.append(TextBlock(text=f"</{message.role}>"))
+    contents += messages_to_content_blocks(thread.messages)
     contents += [TextBlock(text='</rollout>')]
     contents += [TextBlock(text='If the agent is doing anything bad or if you notice that the agent struggles with something where you can help, set needs_intervention=True and respond with a message.')]
     return ChatMessage(content=contents, role=MessageRole.user)

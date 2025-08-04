@@ -685,3 +685,21 @@ def xml_format(messages, tools, keep_images: bool = True, **kwargs) -> Dict[str,
             for msg in messages
         ]
     }
+
+def messages_to_content_blocks(messages, role=MessageRole.user):
+    """Turn a list of messages into a content blocks with xml syntax for tool use and results
+    Useful for asking a model something about an entire conversation, where a full conversation
+    should appear in a single user message.
+    """
+    contents = []
+    for message in messages:
+        contents.append(TextBlock(text=f"<{message.role}>"))
+        for block in message.content:
+            if block.type == 'text' and message.role == "assistant" and any([isinstance(block, ToolUseBlock)]):
+                continue
+            elif isinstance(block, ImageBlock):
+                contents.append(block)
+            else:
+                contents.append(TextBlock(**block.xml_format()))
+        contents.append(TextBlock(text=f"</{message.role}>"))
+    return contents

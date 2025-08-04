@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .workspace import Workspace
 from .agent import Agent
+from .hooks import _HOOKS
 
 def workspace_add(args):
     """Add a new workspace with the current directory as CWD."""
@@ -58,13 +59,21 @@ def workspace_create_expert(args):
         'ENSURE_VENV': "TRUE"
     }
     workspace = Workspace('shared')
+
+    # Check if rag is available - if yes, add a hook
+    hooks = ['claude.md']
+    if 'rag:.' in _HOOKS:
+        hooks += ['rag:.']
+    else:
+        print("RAG not available, continuing without RAG hooks")
     # Create the agent
     expert = Agent(
         id=args.github_repo.split('/')[-1],
         workspace=workspace,
-        model='google/gemini-2.5-pro',
-        prompt_template_yaml=f"prompts/{args.prompt}.yaml",
+        model='gemini-2.5-pro',
+        prompt_template_yaml=f"{args.prompt}.yaml",
         tools=["terminal.get_file", "terminal.list_codebase_files"],
+        hooks=hooks,
         env=env
     )
 
