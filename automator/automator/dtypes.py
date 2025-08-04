@@ -175,8 +175,14 @@ class ToolResultBlock(BaseModel):
         }
     
     def openai_format(self) -> Dict[str, Any]:
-        # Concatenate all text parts inside the tool result
+        # OpenAI tool results only support text content, so we need to handle images differently
         text_parts = [b.text for b in self.content if isinstance(b, TextBlock)]
+        
+        # For images in tool results, we'll add a reference text since OpenAI doesn't support images in tool results
+        image_count = len([b for b in self.content if isinstance(b, ImageBlock)])
+        if image_count > 0:
+            text_parts.append(f"[Tool returned {image_count} image(s) - images will be included in next user message]")
+        
         content_str = "\n".join(text_parts) if text_parts else ""
         return {
             "role": "tool",
@@ -598,19 +604,25 @@ def genai_format(messages, tools, **kwargs) -> Dict[str, Any]:
             if isinstance(block, TextBlock):
                 parts.append(genai_types.Part.from_text(text=block.text))
             elif isinstance(block, ImageBlock):
-                # Convert base64 image to GenAI format
-                data_url = f"data:{block.source.media_type};base64,{block.source.data}"
-                parts.append(genai_types.Part.from_uri(file_uri=data_url, mime_type=block.source.media_type))
+                # Convert base64 image to GenAI format using from_bytes
+                import base64
+                image_data = base64.b64decode(block.source.data)
+                parts.append(genai_types.Part.from_bytes(data=image_data, mime_type=block.source.media_type))
             elif isinstance(block, ToolUseBlock):
                 parts.append(genai_types.Part.from_function_call(
                     name=block.name,
                     args=block.input or {}
                 ))
             elif isinstance(block, ToolResultBlock):
-                # For tool results, add as text parts
+                # For tool results, handle both text and images
                 for content_block in block.content:
                     if isinstance(content_block, TextBlock):
                         parts.append(genai_types.Part.from_text(text=content_block.text))
+                    elif isinstance(content_block, ImageBlock):
+                        # Handle images in tool results
+                        import base64
+                        image_data = base64.b64decode(content_block.source.data)
+                        parts.append(genai_types.Part.from_bytes(data=image_data, mime_type=content_block.source.media_type))
         
         if parts:
             if role == "user":

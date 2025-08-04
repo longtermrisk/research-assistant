@@ -112,14 +112,12 @@ async def get_response_genai(messages, tools, response_format=None, **kwargs):
         config_params['system_instruction'] = request_kwargs['system_instruction']
     
     config = genai_types.GenerateContentConfig(**config_params) if config_params else None
-    
     # Make request
     response = await client.aio.models.generate_content(
-        model=kwargs.get('model', 'gemini-2.0-flash-001'),
+        model=kwargs.get('model', 'gemini-2.5-pro'),
         contents=request_kwargs['contents'],
         config=config
     )
-    
     # Convert response
     chat_response = ChatMessage.from_genai(response)
     

@@ -483,7 +483,7 @@ async def create_thread_api(thread_data: ThreadCreateRequest, workspace_name: st
                 if not query_for_template: query_for_template = api_block.text
             elif api_block.type == "image" and api_block.source:
                 img_src = Base64ImageSource(**api_block.source)
-                internal_initial_content.append(ImageBlock(source=img_src, meta=api_block.meta))
+                internal_initial_content.append(ImageBlock(source=img_src, meta=api_block.meta or {}))
     if not internal_initial_content:
         raise HTTPException(status_code=400, detail="Initial content cannot be empty.")
 
@@ -560,7 +560,7 @@ async def post_message_api(workspace_name: str, thread_id: str, message_data: Me
             internal_content_blocks.append(TextBlock(text=api_block.text, meta=api_block.meta or {}))
         elif api_block.type == "image" and api_block.source:
             img_source = Base64ImageSource(**api_block.source)
-            internal_content_blocks.append(ImageBlock(source=img_source, meta=api_block.meta))
+            internal_content_blocks.append(ImageBlock(source=img_source, meta=api_block.meta or {}))
     if not internal_content_blocks and not hidden_file_blocks: # Message can be just hidden files
         raise HTTPException(status_code=400, detail="Message content cannot be empty if no files are mentioned.")
 
