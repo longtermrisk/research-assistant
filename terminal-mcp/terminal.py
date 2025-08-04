@@ -33,6 +33,7 @@ PROMPT_PATTERNS: List[str] = [
 PROMPT_REGEX = re.compile("|".join(f"({p})" for p in PROMPT_PATTERNS))
 
 
+
 def _get_env(cwd: str | None = None) -> Dict[str, str]:
     env = os.environ.copy()
     env.update(
@@ -154,7 +155,7 @@ def _format_response(new_output: str, *, prompt_seen: bool, eof: bool, tab_id: s
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def terminal_execute(command: str, detach_after_seconds: float = 5.0) -> str:
+async def terminal_execute(command: str, detach_after_seconds: float = 30.0) -> str:
     """Start a new terminal session and execute a command in it."""
     tab_id = str(uuid.uuid4())[:5]
     buffer: deque[str] = deque()
@@ -206,7 +207,7 @@ async def terminal_stdin(
 
 
 @mcp.tool()
-async def terminal_logs(tab_id: str, number_of_lines: int = 1000) -> str:
+async def terminal_logs(tab_id: str, number_of_lines: int = 1000, wait_seconds: float=0.1) -> str:
     """Get logs from a running terminal session."""
     session = sessions.get(tab_id)
     if not session:
@@ -217,7 +218,7 @@ async def terminal_logs(tab_id: str, number_of_lines: int = 1000) -> str:
         output = await _handle_terminal_output(
             process=process,
             tab_id=tab_id,
-            detach_after_seconds=0.1,
+            detach_after_seconds=wait_seconds,
             log_prefix="terminal_logs",
             log_args=str(number_of_lines),
             line_limit=number_of_lines,

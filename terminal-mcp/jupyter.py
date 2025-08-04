@@ -18,12 +18,6 @@ from server import mcp
 
 
 
-def print(*args):
-    with open("stdout", "a") as f:
-        for c in args:
-            f.write(str(c) + "\n")
-    
-
 def replace_require_plotly(html_content):
     # Check if plotly require pattern exists in the HTML
     if 'require(["plotly"]' not in html_content:
@@ -348,10 +342,6 @@ class JupyterNotebook:
                 # Handle stdout/stderr, clean ANSI codes
                 stream_text = output.get('text', '')
                 cleaned_text = maybe_shorten(clean_ansi(stream_text).strip())
-                print({
-                    'stream_text': stream_text,
-                    'cleaned_text': cleaned_text
-                })
                 if cleaned_text: # Add only if there's non-empty text
                     results.append(TextContent(type='text', text=cleaned_text))
 
@@ -393,7 +383,6 @@ class JupyterNotebook:
             else: # Optionally log unhandled types
                  results.append(TextContent(type='text', text=f"Note: Unhandled output type '{output_type}' encountered."))
         
-        print("results", results)
         return results
 
     def save(self):
