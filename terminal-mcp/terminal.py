@@ -247,20 +247,4 @@ async def _handle_terminal_output(
         sessions[tab_id]["process"] = None
 
     response = _format_response(cleaned, prompt_seen=prompt_seen, eof=eof, tab_id=tab_id)
-    with open(".logs/" + tab_id, "a") as f:
-        f.write(f"\n\n======== {log_prefix}({log_args}) ========\n")
-        f.write(response)
-
     return TextContent(text=response, annotations={'display_html': f"<pre>{response}</pre>"}, type="text")
-
-
-# # DEBUG
-# async def debug():
-#     cmd = "python generate_refusals.py"
-#     output = await terminal_execute(cmd, detach_after_seconds=5)
-#     breakpoint()
-
-
-# if __name__ == "__main__":
-#     os.chdir('/Users/nielswarncke/.automator/workspaces/planb/workspace')
-#     asyncio.run(debug())
