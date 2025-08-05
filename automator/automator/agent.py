@@ -6,15 +6,15 @@ from uuid import uuid4
 import json
 import logging
 from pathlib import Path
+import os
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
 
 from dotenv import load_dotenv
-from automator.utils import load_json
 
-from automator.dtypes import (
+from localrouter import (
     ContentBlock,
     TextBlock,
     ImageBlock,
@@ -24,17 +24,18 @@ from automator.dtypes import (
     ToolResultBlock,
     PromptTemplate,
     ChatMessage,
-    MessageRole
+    MessageRole,
+    get_response_with_backoff as get_response
 )
-from automator.llm import get_response
 from automator.hooks import load_hooks, _HOOKS
 
 logger = logging.getLogger("uvicorn")
-
 load_dotenv()
-
-_SERVERS = load_json('~/mcp.json').get('mcpServers', {})
 load_hooks()
+
+
+with open(os.path.expanduser("~/mcp.json"), 'r') as f:
+    _SERVERS = json.load(f).get('mcpServers', {})
 
 
 class Agent:
@@ -242,7 +243,6 @@ class Thread:
         for tool_id_spec in tool_specs:
             server_id, tool_name_filter = tool_id_spec.split(".", 1)
             if server_id not in self.server_sessions:
-                print(f"Connecting to server {server_id}")
                 server_config = _SERVERS.get(server_id)
                 if server_config is None: raise ValueError(f"Server {server_id} not in MCP config.")
                 
@@ -253,10 +253,10 @@ class Thread:
                     effective_env = {**(server_config.get('env', {})), **base_env}
                     command, args = maybe_handle_docker_command(server_config['command'], server_config['args'], effective_env)
 
-                    threads_root = self.home.parent
+                    threads_root = self.workspace._root_dir
                     log_dir = (threads_root / "threads" / self.id)
                     log_dir.mkdir(parents=True, exist_ok=True)
-                    server_log_fp = open(log_dir / "server.log", "a", encoding="utf-8", buffering=1)
+                    server_log_fp = open(log_dir / f"{server_id}.log", "a", encoding="utf-8", buffering=1)
                     print(f"Logging to: {server_log_fp}")
 
                     params = StdioServerParameters(command=command, args=args, env=effective_env)

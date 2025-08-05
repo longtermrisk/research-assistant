@@ -1,7 +1,7 @@
 import os
 import glob
 import importlib.util
-from automator.dtypes import TextBlock
+from localrouter import TextBlock
 
 _HOOKS = {}
 
@@ -30,7 +30,8 @@ def init_claude_md(thread) -> None:
     claude_md_path = home / "LLM.md"
     if os.path.exists(home / '.venv'):
         python = "## Python\nThis project uses uv to manage dependencies. The default python points to the local venv. Use `uv add <package>` to install a package."
-
+    else:
+        python = ""
     if not claude_md_path.exists():
         with open(claude_md_path, "w") as f:
             cwd_content_str = "\n".join([f"- {p.name}" for p in home.iterdir() if p.is_file()])

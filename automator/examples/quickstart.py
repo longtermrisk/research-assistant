@@ -4,13 +4,14 @@ import asyncio
 
 from automator.agent import Agent
 from automator.workspace import Workspace
+from localrouter import TextBlock, ToolUseBlock, ToolResultBlock
 
 
 async def main() -> None:
     workspace = Workspace('my-workspace')
     bash_agent = Agent(
         model='gemini-2.5-pro',
-        prompt_template_yaml="prompts/chatgpt.yaml",
+        prompt_template_yaml="chatgpt.yaml",
         tools=["terminal.*",]
     )
     bash_agent = workspace.add_agent(agent=bash_agent, id="bash")
@@ -19,7 +20,19 @@ async def main() -> None:
     while (query := input("Query> ")) != 'exit':
         thread = await (thread or bash_agent).run(query)
         async for message in thread:
-            print(message)
+            for block in message.content:
+                if isinstance(block, TextBlock):
+                    print(block.text)
+                elif isinstance(block, ToolUseBlock):
+                    print(block.name, block.input)
+                elif isinstance(block, ToolResultBlock):
+                    for part in block.content:
+                        try:
+                            print(part.text)
+                        except:
+                            print(part)
+                else:
+                    print(block)
     workspace.add_thread(thread=thread, id=input("Thread ID: "))
 
     await thread.cleanup()

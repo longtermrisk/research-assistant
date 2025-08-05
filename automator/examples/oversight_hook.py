@@ -1,7 +1,7 @@
 import os
 from pydantic import BaseModel
-from automator.llm import get_response
-from automator.dtypes import ChatMessage, TextBlock, ToolUseBlock, ImageBlock, MessageRole, genai_format, messages_to_content_blocks
+from localrouter import get_response, ChatMessage, TextBlock, ToolUseBlock, ImageBlock, MessageRole
+from localrouter.dtypes import genai_format, messages_to_content_blocks
 from automator.hooks import register_hook
 
 import asyncio

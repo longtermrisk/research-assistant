@@ -1,35 +1,3 @@
-"""Workspace management for Automator.
-
-The workspace feature groups agents and threads under a *workspace path*
-and takes care of persisting their state to disk.  The public API mirrors
-the usage examples in the project README::
-
-    workspace = Workspace("my-project/sub-project", env={"FOO": "bar"})
-    bash_agent = workspace.add_agent(agent=bash_agent, id="bash_agent")
-    workspace.add_thread(thread=thread, id="My first thread")
-
-Instances can later be rehydrated:
-
-    workspace = Workspace("my-project/sub-project")
-    agent  = workspace.get_agent("bash_agent")
-    thread = workspace.get_thread("My first thread")
-
-Implementation strategy
------------------------
-Agents and threads are serialised as JSON using the ``.json()`` helper
-methods that already exist on ``Agent`` and ``Thread``.  Each workspace
-has the following on-disk layout (all paths are *relative to* the
-workspace directory):
-
-* ``agents/<id>.json``   – saved agents
-* ``threads/<id>.json``  – saved threads
-
-Only *state* that can be reconstructed is persisted (e.g. open MCP
-connections are intentionally **not** serialised).  When a thread is
-loaded back it will be in its initial disconnected state and establish
-fresh MCP connections the first time it is iterated over again.
-"""
-
 from __future__ import annotations
 
 import json
@@ -40,7 +8,7 @@ from typing import Dict, List, Optional
 import subprocess
 
 from automator.agent import Agent , Thread
-from automator.dtypes import ChatMessage
+from localrouter import ChatMessage
 
 logger = logging.getLogger("uvicorn") # Or your preferred logger
 

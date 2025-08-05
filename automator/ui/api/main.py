@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from automator.agent import Agent, Thread, _SERVERS
-from automator.dtypes import (
+from localrouter import (
     Base64ImageSource,
     ChatMessage,
     ContentBlock as InternalContentBlock,
@@ -19,10 +19,10 @@ from automator.dtypes import (
     MessageRole,
     TextBlock,
     ToolDefinition,
+    providers
 )
 from automator.workspace import Workspace
 from automator.gitignore_parser import load_gitignore_patterns, is_path_ignored
-from automator.llm import providers
 
 app = FastAPI()
 app.add_middleware(

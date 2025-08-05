@@ -1,8 +1,6 @@
-# CLAUDE.md
+# LLM.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project Overview
+## Project Overview: automator
 
 Automator is an MCP-based LLM agent system that enables creating and orchestrating AI agents with extensible tool access. It combines multiple LLM providers (Anthropic Claude, OpenAI GPT, Google Gemini) with a flexible tool system via the Model Context Protocol (MCP).
 
