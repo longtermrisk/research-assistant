@@ -50,6 +50,7 @@ This file should serve as an onboarding guide for you in the future. Keep it up-
 - the purpose of the project
 - the state of the code base
 - any other relevant information
+Updating this file is the strong default after doing any change in the codebase. Do not create documentation in other files unless explicitly asked to do so.
 """)
 
 

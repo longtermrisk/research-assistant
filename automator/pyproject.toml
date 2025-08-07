@@ -17,6 +17,7 @@ dependencies = [
     "matplotlib>=3.10.3",
     "watchdog>=6.0.0",
     "localrouter>=0.1.1",
+    "isignored>=0.1.0",
 ]
 
 [project.optional-dependencies]

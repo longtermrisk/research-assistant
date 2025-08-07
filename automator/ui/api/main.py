@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from automator.agent import Agent, Thread, _SERVERS
+from isignored import is_ignored
 from localrouter import (
     Base64ImageSource,
     ChatMessage,
@@ -21,8 +21,9 @@ from localrouter import (
     ToolDefinition,
     providers
 )
+
+from automator.agent import Agent, Thread, _SERVERS
 from automator.workspace import Workspace
-from automator.gitignore_parser import load_gitignore_patterns, is_path_ignored
 
 app = FastAPI()
 app.add_middleware(
@@ -213,7 +214,6 @@ def get_default_workspaces_root() -> Path:
 def create_file_content_blocks(
     workspace_cwd: Path,
     mentioned_paths: List[str],
-    gitignore_patterns: List[str]
 ) -> List[InternalContentBlock]:
     """Creates hidden text blocks for mentioned files."""
     content_blocks: List[InternalContentBlock] = []
@@ -236,7 +236,7 @@ def create_file_content_blocks(
             logger.warning(f"Mentioned path is not a file or does not exist: {rel_path_str}")
             continue
 
-        if is_path_ignored(abs_file_path, workspace_cwd, gitignore_patterns):
+        if is_ignored(abs_file_path):
             logger.info(f"Mentioned file is gitignored, skipping: {rel_path_str}")
             continue
         
@@ -396,36 +396,62 @@ async def get_workspace_details_api(ws: Workspace = Depends(get_workspace_depend
 
 @app.get("/workspaces/{workspace_name}/files", response_model=List[FileSystemItem])
 async def list_workspace_files_api(ws: Workspace = Depends(get_workspace_dependency)):
-    """Lists files and folders in the workspace CWD, respecting .gitignore."""
-    workspace_cwd = Path(ws.env.get("CWD", str(ws._root_dir / "workspace"))).resolve()
+    """Return a tree of files/directories under the workspace CWD, respecting `.gitignore`."""
+
+    workspace_cwd = ws.root
     if not workspace_cwd.is_dir():
-        raise HTTPException(status_code=404, detail=f"Workspace CWD not found or not a directory: {workspace_cwd}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Workspace CWD not found or not a directory: {workspace_cwd}",
+        )
 
-    gitignore_path = workspace_cwd / ".gitignore"
-    gitignore_patterns = load_gitignore_patterns(gitignore_path)
-    logger.info(f"Loaded {len(gitignore_patterns)} patterns from {gitignore_path}")
+    def build_file_tree(dir_abs: Path, base_abs: Path) -> List[FileSystemItem]:
+        rel_dir = dir_abs.relative_to(base_abs)
+        if rel_dir != Path(".") and is_ignored(Path(f"{rel_dir}{os.sep}")):
+            # Whole sub-tree is ignored → stop here.
+            logger.debug("Pruning ignored directory: %s", rel_dir)
+            return []
 
-    def build_file_tree(current_dir_abs: Path, base_dir_abs: Path) -> List[FileSystemItem]:
-        items = []
-        for item_abs in sorted(current_dir_abs.iterdir(), key=lambda p: (p.is_file(), p.name.lower())):
-            if is_path_ignored(item_abs, base_dir_abs, gitignore_patterns):
-                logger.debug(f"Ignoring gitignored path: {item_abs.relative_to(base_dir_abs)}")
-                continue
+        items: List[FileSystemItem] = []
+        with os.scandir(dir_abs) as it:
+            for entry in sorted(
+                it,
+                key=lambda e: (e.is_file(follow_symlinks=False), e.name.lower()),
+            ):
+                entry_abs = Path(entry.path)
+                entry_rel = entry_abs.relative_to(base_abs)
+                entry_is_dir = entry.is_dir(follow_symlinks=False)
 
-            item_rel_path = str(item_abs.relative_to(base_dir_abs))
-            
-            fs_item = FileSystemItem(
-                id=item_rel_path, # Use relative path as ID
-                name=item_abs.name,
-                path=item_rel_path,
-                type="folder" if item_abs.is_dir() else "file"
-            )
-            if item_abs.is_dir():
-                fs_item.children = build_file_tree(item_abs, base_dir_abs)
-            items.append(fs_item)
+                # Append '/' when checking a directory so patterns like 'node_modules/' match.
+                ignored = (
+                    is_ignored(Path(f"{entry_abs}{os.sep}"))
+                    if entry_is_dir
+                    else is_ignored(entry_abs)
+                )
+                if ignored:
+                    logger.debug("Ignoring path via .gitignore: %s", entry_rel)
+                    continue
+
+                fs_item = FileSystemItem(
+                    id=str(entry_rel),
+                    name=entry.name,
+                    path=str(entry_rel),
+                    type="folder" if entry_is_dir else "file",
+                )
+
+                if entry_is_dir:
+                    fs_item.children = build_file_tree(entry_abs, base_abs)
+
+                items.append(fs_item)
+
         return items
 
-    return build_file_tree(workspace_cwd, workspace_cwd)
+    # ------------------------------------------------------------------
+    # Kick off traversal
+    # ------------------------------------------------------------------
+    breakpoint()
+    items = build_file_tree(workspace_cwd, workspace_cwd)
+    return items
 
 
 @app.post("/workspaces/{workspace_name}/agents", response_model=AgentResponse, status_code=201)
@@ -466,11 +492,9 @@ async def create_thread_api(thread_data: ThreadCreateRequest, workspace_name: st
     hidden_file_blocks: List[InternalContentBlock] = []
     if thread_data.mentioned_file_paths:
         workspace_cwd = Path(ws.env.get("CWD", str(ws._root_dir / "workspace"))).resolve()
-        gitignore_patterns = load_gitignore_patterns(workspace_cwd / ".gitignore")
         hidden_file_blocks = create_file_content_blocks(
             workspace_cwd,
-            thread_data.mentioned_file_paths,
-            gitignore_patterns
+            thread_data.mentioned_file_paths
         )
 
     internal_initial_content: List[InternalContentBlock] = []
@@ -547,11 +571,9 @@ async def post_message_api(workspace_name: str, thread_id: str, message_data: Me
     hidden_file_blocks: List[InternalContentBlock] = []
     if message_data.mentioned_file_paths:
         workspace_cwd = Path(ws.env.get("CWD", str(ws._root_dir / "workspace"))).resolve()
-        gitignore_patterns = load_gitignore_patterns(workspace_cwd / ".gitignore")
         hidden_file_blocks = create_file_content_blocks(
             workspace_cwd,
-            message_data.mentioned_file_paths,
-            gitignore_patterns
+            message_data.mentioned_file_paths
         )
 
     internal_content_blocks: List[InternalContentBlock] = []
