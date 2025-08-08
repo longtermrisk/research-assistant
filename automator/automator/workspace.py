@@ -98,7 +98,7 @@ class Workspace:
         # Create a new Agent instance to ensure it's clean and has the merged_env
         # and correct workspace association and ID.
         updated_agent = Agent(
-            model=agent.model,
+            llm=agent.llm,
             prompt_template_yaml=agent.prompt_template_yaml,
             tools=list(agent.tools) if agent.tools else [],
             env=merged_env,
@@ -106,7 +106,8 @@ class Workspace:
             as_tool=agent.as_tool, # This should be a dict or ToolDefinition model
             workspace=self, # Assign this workspace instance
             id=id,
-            prompt_template_vars=getattr(agent, 'prompt_template_vars', None) 
+            prompt_template_vars=getattr(agent, 'prompt_template_vars', None),
+            hooks=getattr(agent, 'hooks', None)
         )
         self._save_json(self._agent_path(id), updated_agent.json())
         return updated_agent
@@ -117,6 +118,16 @@ class Workspace:
             raise KeyError(f"Agent '{id}' not found in workspace '{self.name}'.")
         data = self._load_json(path)
         
+        # Handle backward compatibility - convert old format to new
+        if "model" in data and "llm" not in data:
+            # Old format - create llm dict from model
+            data["llm"] = {"model": data["model"]}
+            # Optionally migrate temperature and max_tokens if they were stored separately
+            if "temperature" in data:
+                data["llm"]["temperature"] = data["temperature"]
+            if "max_tokens" in data:
+                data["llm"]["max_tokens"] = data["max_tokens"]
+        
         # The env stored in agent JSON is already merged by add_agent.
         # For get_agent, we want to reflect that persisted state, potentially re-applying current workspace.env overrides.
         # The current workspace instance's self.env should take precedence for CWD or any live overrides.
@@ -124,7 +135,7 @@ class Workspace:
         final_env = {**self.env, **persisted_agent_env}
 
         loaded_agent = Agent(
-            model=data["model"],
+            llm=data.get("llm", {}),
             prompt_template_yaml=data["prompt_template"],
             tools=data.get("tools", []),
             env=final_env,
@@ -156,19 +167,27 @@ class Workspace:
         data = self._load_json(path)
         messages = [ChatMessage(**m) for m in data["messages"]]
         
+        # Handle backward compatibility - convert old format to new
+        if "model" in data and "llm" not in data:
+            # Old format - create llm dict from model, temperature, max_tokens
+            data["llm"] = {
+                "model": data["model"],
+                "temperature": data.get("temperature", 0.7),
+                "max_tokens": data.get("max_tokens", 8000)
+            }
+        
         persisted_thread_env = data.get("env", {})
         final_env = {**self.env, **persisted_thread_env}
 
         thread_obj = Thread(
-            model=data["model"],
+            llm=data.get("llm", {}),
             tools=data.get("tools", []),
             messages=messages,
             env=final_env,
-            temperature=data.get("temperature", 0.7),
-            max_tokens=data.get("max_tokens", 8000),
             workspace=self,
             subagents=data.get("subagents", []),
-            id=id
+            id=id,
+            hooks=data.get("hooks", [])
         )
         for thread_id_sub in data.get("thread_ids", []):
             try:

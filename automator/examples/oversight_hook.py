@@ -50,7 +50,7 @@ async def main() -> None:
     workspace = Workspace('automator')
     bash_agent = Agent(
         id='overseen',
-        model='claude-sonnet-4-20250514',
+        llm={"model": "claude-sonnet-4-20250514"},
         prompt_template_yaml="prompts/chatgpt.yaml",
         tools=["terminal.*"],
         hooks=['anti_reward_hacking', 'claude.md'],

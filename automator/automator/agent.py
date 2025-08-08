@@ -34,15 +34,26 @@ load_dotenv()
 load_hooks()
 
 
-with open(os.path.expanduser("~/mcp.json"), 'r') as f:
-    _SERVERS = json.load(f).get('mcpServers', {})
+def load_json(path):
+    with open(os.path.expanduser(path), 'r') as f:
+        return json.load(f)
+
+_SERVERS = load_json("~/mcp.json").get('mcpServers', {})
+
+_ALIAS = {
+    'sota':  'gpt-5',
+    'sota-thinking': 'gpt-5-thinking',
+    'opus': 'claude-opus-4-1',
+    'sonnet': 'claude-sonnet-4-0',
+    'gemini': 'gemini-2.5-pro'
+}
 
 
 class Agent:
     def __init__(
         self,
-        model: str, # Model name to use for the agent
-        prompt_template_yaml: str, # Path to the prompt template YAML file
+        llm: Dict[str, Any], # LLM configuration dict for get_response
+        prompt_template_yaml: str = None, # Path to the prompt template YAML file
         tools: List[str] = None, # List of tool names to use in format "{server_id}.{tool_name}" or "{server_id}.*"
         env: Dict[str, str] = None, # Environment variables used for MCP servers
         subagents: None | List[str] = None, # List of subagent names to use
@@ -52,9 +63,9 @@ class Agent:
         prompt_template_vars: Optional[Dict[str, Any]] = None, # Default values to use in prompt_template.apply()
         hooks: Optional[List[str]] = None, # List of hooks to use
     ):
-        self.model = model
+        self.llm = llm
         self.prompt_template_yaml = prompt_template_yaml
-        self.prompt_template = PromptTemplate.from_yaml(prompt_template_yaml)
+        self.prompt_template = PromptTemplate.from_yaml(prompt_template_yaml) if prompt_template_yaml else None
         self.tools = tools or []
         self.env = env or {}
         self.subagents = subagents or []
@@ -76,35 +87,44 @@ class Agent:
     async def run(self,
                   query: Optional[str]=None,
                   initial_user_content: Optional[List[ContentBlock]] = None,
-                  temperature: float = 0.7, max_tokens: int = None,
                   thread_id: Optional[str] = None,
+                  llm_overrides: Optional[Dict[str, Any]] = None,
                   **prompt_template):
-        if max_tokens is None:
-            if 'haiku' in self.model:
-                max_tokens = 4000
-            elif 'gemini' in self.model:
-                max_tokens = 64000
-            elif 'claude' in self.model:
-                max_tokens = 32000
-            elif self.model.startswith('o'):
-                max_tokens = 64000
+        # Start with agent's llm config
+        thread_llm = dict(self.llm)
+            
+        # Apply any additional llm overrides
+        if llm_overrides:
+            thread_llm.update(llm_overrides)
+            
+        # Set defaults if not specified
+        if 'temperature' not in thread_llm:
+            thread_llm['temperature'] = 0.7
+        if 'max_tokens' not in thread_llm:
+            model = thread_llm.get('model', '')
+            if 'haiku' in model:
+                thread_llm['max_tokens'] = 4000
+            elif 'gemini' in model:
+                thread_llm['max_tokens'] = 64000
+            elif 'claude' in model:
+                thread_llm['max_tokens'] = 32000
+            else:
+                thread_llm['max_tokens'] = 64000
 
         _vars = dict(**self.prompt_template_vars, **prompt_template)
         messages_to_apply = {"query": query} if query is not None else {}
-        messages = self.prompt_template.apply(dict(messages_to_apply, **_vars))
+        messages = self.prompt_template.apply(dict(messages_to_apply, **_vars)) if self.prompt_template else []
 
         if initial_user_content:
             user_message = ChatMessage(role=MessageRole.user, content=initial_user_content)
-            messages = messages[:-1] + [user_message]
+            messages = messages[:-1] + [user_message] if messages else [user_message]
         
         thread = Thread(
-            model=self.model, 
+            llm=thread_llm,
             messages=messages, 
             tools=self.tools, 
             env=self.env, 
             subagents=self.subagents, 
-            temperature=temperature, 
-            max_tokens=max_tokens, 
             workspace=self.workspace, 
             id=thread_id,
             hooks=self.hooks
@@ -117,7 +137,7 @@ class Agent:
         if isinstance(self.as_tool, (ToolDefinition, SubagentToolDefinition)):
              as_tool_for_json = self.as_tool.model_dump()
         return {
-            "model": self.model,
+            "llm": self.llm,
             "prompt_template": self.prompt_template_yaml,
             "tools": self.tools,
             "env": self.env,
@@ -212,17 +232,14 @@ def maybe_handle_docker_command(command: str, args: List[str], env: Dict[str, st
     return command, args
 
 class Thread:
-    def __init__(self, model: str, messages: List[ChatMessage], tools: list[str], env: dict[str, str],
-                 subagents: Optional[List[str]] = None, temperature: float = 0.7, max_tokens: int = 4000,
-                 workspace: Optional['Workspace'] = None, id: Optional[str] = None, hooks: Optional[List[str]] = None):
+    def __init__(self, llm: Dict[str, Any], messages: List[ChatMessage] = None, tools: list[str] = None, env: dict[str, str] = None,
+                 subagents: Optional[List[str]] = None, workspace: Optional['Workspace'] = None, id: Optional[str] = None, hooks: Optional[List[str]] = None):
         self.exit_stack = AsyncExitStack()
         self.server_sessions: Dict[str, ClientSession] = {}
-        self.model = model
-        self._tools = tools
-        self.messages = messages
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-        self.env = env
+        self.llm = llm
+        self._tools = tools or []
+        self.messages = messages or []
+        self.env = env or {}
         self.subagents = subagents or []
         self._threads: Dict[str, Thread] = {}
         self.workspace = workspace
@@ -232,6 +249,18 @@ class Thread:
         self._interrupted = False
         self.messages_after_hooks = []
         self.inbox = []
+    
+    def _resolve_model_alias(self, model: str) -> str:
+        """Resolve model aliases: example - model = 'sota'
+        - first checks if a workspace file defines what sota is, eg 'sota'->'opus'
+        - then check the global alias file and replaces again, eg 'opus'->'claude-opus-4-1'
+        """
+        thread_aliases = self.home / '.model_alias.json'
+        if thread_aliases.exists():
+            resolved = load_json(thread_aliases).get(model, model)
+        else:
+            resolved = model
+        return _ALIAS.get(resolved, resolved)
         
     async def prepare(self):
         if self._ready: return
@@ -346,12 +375,16 @@ class Thread:
         while not self._interrupted:
             if self.inbox:
                 self.messages[-1].content, self.inbox = self.messages[-1].content + self.inbox, []
+            
+            # Prepare llm config with resolved model alias
+            llm_config = dict(self.llm)
+            if 'model' in llm_config:
+                llm_config['model'] = self._resolve_model_alias(llm_config['model'])
+            
             llm_response_message = await get_response(
-                model=self.model,
                 messages=self.messages_after_hooks,
                 tools=[t.definition for t in self.tools if hasattr(t, 'definition')],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens
+                **llm_config
             ); await asyncio.sleep(0.1)
             if self.inbox:
                 continue
@@ -422,6 +455,5 @@ class Thread:
         return Path(self.env['CWD'])
 
     def json(self):
-        return {"model": self.model, "messages": [m.model_dump() for m in self.messages], "tools": self._tools,
-                "temperature": self.temperature, "max_tokens": self.max_tokens, "env": self.env,
-                "subagents": self.subagents, "thread_ids": list(self._threads.keys()), "hooks": self.hooks}
+        return {"llm": self.llm, "messages": [m.model_dump() for m in self.messages], "tools": self._tools,
+                "env": self.env, "subagents": self.subagents, "thread_ids": list(self._threads.keys()), "hooks": self.hooks}

@@ -407,7 +407,7 @@ async def list_workspace_files_api(ws: Workspace = Depends(get_workspace_depende
 
     def build_file_tree(dir_abs: Path, base_abs: Path) -> List[FileSystemItem]:
         rel_dir = dir_abs.relative_to(base_abs)
-        if rel_dir != Path(".") and is_ignored(Path(f"{rel_dir}{os.sep}")):
+        if rel_dir != Path(".") and is_ignored(Path(f"{dir_abs}{os.sep}")):
             # Whole sub-tree is ignored → stop here.
             logger.debug("Pruning ignored directory: %s", rel_dir)
             return []
@@ -429,7 +429,6 @@ async def list_workspace_files_api(ws: Workspace = Depends(get_workspace_depende
                     else is_ignored(entry_abs)
                 )
                 if ignored:
-                    logger.debug("Ignoring path via .gitignore: %s", entry_rel)
                     continue
 
                 fs_item = FileSystemItem(
@@ -449,7 +448,6 @@ async def list_workspace_files_api(ws: Workspace = Depends(get_workspace_depende
     # ------------------------------------------------------------------
     # Kick off traversal
     # ------------------------------------------------------------------
-    breakpoint()
     items = build_file_tree(workspace_cwd, workspace_cwd)
     return items
 

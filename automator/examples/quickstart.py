@@ -10,7 +10,7 @@ from localrouter import TextBlock, ToolUseBlock, ToolResultBlock
 async def main() -> None:
     workspace = Workspace('my-workspace')
     bash_agent = Agent(
-        model='gemini-2.5-pro',
+        llm={"model": "gemini-2.5-pro"},
         prompt_template_yaml="chatgpt.yaml",
         tools=["terminal.*",]
     )

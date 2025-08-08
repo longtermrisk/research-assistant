@@ -201,9 +201,9 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'sse'", specifier = ">=0.27.0" },
     { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "ipython", specifier = ">=9.2.0" },
-    { name = "isignored", specifier = ">=0.1.0" },
+    { name = "isignored", specifier = ">=0.1.1" },
     { name = "jupyterlab", specifier = ">=4.4.2" },
-    { name = "localrouter", specifier = ">=0.1.1" },
+    { name = "localrouter", specifier = ">=0.2.0" },
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.6.0" },
     { name = "pandas", specifier = ">=2.2.3" },
@@ -744,11 +744,11 @@ wheels = [
 
 [[package]]
 name = "isignored"
-version = "0.1.0"
+version = "0.1.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e8/5f/11874a14ab6d2fa63def9dc84b98a91289b672f0a238fd22c60615158a51/isignored-0.1.0.tar.gz", hash = "sha256:e341daf3c7aa29cefa0540ff77c1fe1de6cebc05c86c17648a47a56287347ec7", size = 12660, upload_time = "2025-08-07T13:27:57.873Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b6/3c/bbbbdf055db6b89eb47cd571f741ef3c8e38a2de3ea228700b649b218a1d/isignored-0.1.1.tar.gz", hash = "sha256:510570cc196f804ac74bea56600d083ecb6f19e3ad862cf32f26a3533ad11f9f", size = 13207, upload_time = "2025-08-08T09:51:46.991Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/39/4b/56f18ced54faad29fec02d6bc7c535bce52dc9a60071a88446abd033109c/isignored-0.1.0-py3-none-any.whl", hash = "sha256:ca92b2f2bd32e57967727a4c5f09051cf4dda9c390e483bb268f9503bf8c11fb", size = 4390, upload_time = "2025-08-07T13:27:56.603Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/e9/4f76f5c1c9732fffda468fec540ab28d2d94d7e3f46bcde2fe71a9c762bb/isignored-0.1.1-py3-none-any.whl", hash = "sha256:df28ba95b067a1e34c4d7e27d6c984ff98d9cc0b6c42183402dfeda3d80ecf27", size = 4576, upload_time = "2025-08-08T09:51:45.739Z" },
 ]
 
 [[package]]
@@ -1137,7 +1137,7 @@ wheels = [
 
 [[package]]
 name = "localrouter"
-version = "0.1.1"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anthropic" },
@@ -1148,9 +1148,9 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/81/49/a5cabdd1d228738609c08821c4dbac0f2939ab4c2457c615d420134aae8a/localrouter-0.1.1.tar.gz", hash = "sha256:29c21ff6710c099dfcec24fed1c1eace3f83f0613718060b6883c329470139ac", size = 18288, upload_time = "2025-08-05T14:44:09.778Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/50/fd/da24008337193be817c80cd9df06c6de919a2d438d3863a4eba769be3e9a/localrouter-0.2.0.tar.gz", hash = "sha256:c98bd85f11dd79f2e5d4126750e596391a51e6f7a270fb4cc5bd06f17bfd3720", size = 22646, upload_time = "2025-08-08T10:56:24.831Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/62/11/24a6a4d608fcf1e6f5850bc33b41ec7b534890d7527b9a17af0682d0976d/localrouter-0.1.1-py3-none-any.whl", hash = "sha256:efddd7782187d4e8211bd7d964a0224f60db08df94bc05f0ecdf5c4c47c53e53", size = 14615, upload_time = "2025-08-05T14:44:08.392Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/54/a8fb7c032657e1fef7d7f2a7ee097a5ffe9b18ab714ec3640d796914d16c/localrouter-0.2.0-py3-none-any.whl", hash = "sha256:a39b32bd9d3ee156faa027070c879109710c61970dbc5760181e7c4870a56a78", size = 16598, upload_time = "2025-08-08T10:56:23.469Z" },
 ]
 
 [[package]]
