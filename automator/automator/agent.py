@@ -25,7 +25,8 @@ from localrouter import (
     PromptTemplate,
     ChatMessage,
     MessageRole,
-    get_response_with_backoff as get_response
+    get_response
+    # get_response_with_backoff as get_response
 )
 from automator.hooks import load_hooks, _HOOKS
 
@@ -127,7 +128,8 @@ class Agent:
             subagents=self.subagents, 
             workspace=self.workspace, 
             id=thread_id,
-            hooks=self.hooks
+            hooks=self.hooks,
+            agent_id=self.id  # Pass the agent's ID to the thread
         )
         await thread.prepare()
         return thread
@@ -233,7 +235,8 @@ def maybe_handle_docker_command(command: str, args: List[str], env: Dict[str, st
 
 class Thread:
     def __init__(self, llm: Dict[str, Any], messages: List[ChatMessage] = None, tools: list[str] = None, env: dict[str, str] = None,
-                 subagents: Optional[List[str]] = None, workspace: Optional['Workspace'] = None, id: Optional[str] = None, hooks: Optional[List[str]] = None):
+                 subagents: Optional[List[str]] = None, workspace: Optional['Workspace'] = None, id: Optional[str] = None, hooks: Optional[List[str]] = None,
+                 agent_id: Optional[str] = None):
         self.exit_stack = AsyncExitStack()
         self.server_sessions: Dict[str, ClientSession] = {}
         self.llm = llm
@@ -244,6 +247,7 @@ class Thread:
         self._threads: Dict[str, Thread] = {}
         self.workspace = workspace
         self.id = id or uuid4().hex
+        self.agent_id = agent_id  # Track which agent created this thread
         self.tools: List[McpServerTool | SubagentTool] = []; self._ready = False # type: ignore
         self.hooks = hooks or []
         self._interrupted = False
@@ -456,4 +460,5 @@ class Thread:
 
     def json(self):
         return {"llm": self.llm, "messages": [m.model_dump() for m in self.messages], "tools": self._tools,
-                "env": self.env, "subagents": self.subagents, "thread_ids": list(self._threads.keys()), "hooks": self.hooks}
+                "env": self.env, "subagents": self.subagents, "thread_ids": list(self._threads.keys()), "hooks": self.hooks,
+                "agent_id": self.agent_id}

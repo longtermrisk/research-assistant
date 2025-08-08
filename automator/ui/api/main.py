@@ -129,7 +129,7 @@ class WorkspaceResponse(BaseModel):
 
 class AgentCreate(BaseModel):
     id: str
-    model: str
+    llm: Dict[str, Any]  # Changed from model: str to llm: Dict
     prompt_template_yaml: str
     tools: Optional[List[str]] = None
     env: Optional[Dict[str, str]] = None
@@ -139,7 +139,7 @@ class AgentCreate(BaseModel):
 
 class AgentResponse(BaseModel):
     id: str
-    model: str
+    llm: Dict[str, Any]  # Changed from model: str to llm: Dict
     prompt_template: str
     tools: List[str]
     env: Dict[str, str]
@@ -176,13 +176,14 @@ class ThreadCreateRequest(BaseModel):
 
 class ThreadResponse(BaseModel):
     id: str
-    model: str
+    llm: Dict[str, Any]  # Changed from model: str to llm: Dict
     tools: List[str]
     env: Dict[str, str]
     subagents: List[str]
     workspace_name: str
     initial_messages_count: int
     first_user_message_preview: Optional[str] = None
+    agent_id: Optional[str] = None  # Added to track which agent created the thread
 
 class ThreadDetailResponse(ThreadResponse):
     messages: List[ApiChatMessage]
@@ -456,7 +457,7 @@ async def list_workspace_files_api(ws: Workspace = Depends(get_workspace_depende
 async def create_agent_api(agent_data: AgentCreate, ws: Workspace = Depends(get_workspace_dependency)):
     as_tool_def = ToolDefinition(**agent_data.as_tool) if agent_data.as_tool else None
     agent = Agent(
-        model=agent_data.model, prompt_template_yaml=agent_data.prompt_template_yaml,
+        llm=agent_data.llm, prompt_template_yaml=agent_data.prompt_template_yaml,
         tools=agent_data.tools, env=agent_data.env, subagents=agent_data.subagents,
         as_tool=as_tool_def, prompt_template_vars=agent_data.prompt_template_vars
     )
@@ -468,7 +469,12 @@ async def create_agent_api(agent_data: AgentCreate, ws: Workspace = Depends(get_
 
 @app.get("/workspaces/{workspace_name}/agents", response_model=List[AgentResponse])
 async def list_agents_api(ws: Workspace = Depends(get_workspace_dependency)):
-    return [AgentResponse(**ws.get_agent(id=aid).json(), workspace_name=ws.name, id=aid) for aid in ws.list_agents()]
+    agents = []
+    for aid in ws.list_agents():
+        agent_json = ws.get_agent(id=aid).json()
+        # No need to extract model from llm anymore, keep llm as is
+        agents += [AgentResponse(**agent_json, workspace_name=ws.name, id=aid)]
+    return agents
 
 @app.get("/workspaces/{workspace_name}/agents/{agent_id}", response_model=AgentResponse)
 async def get_agent_details_api(agent_id: str, ws: Workspace = Depends(get_workspace_dependency)):
@@ -523,9 +529,10 @@ async def create_thread_api(thread_data: ThreadCreateRequest, workspace_name: st
     asyncio.create_task(run_agent_turn(ws, thread, initial_run=True))
     
     return ThreadResponse(
-        id=thread.id, model=thread.model, tools=thread._tools, env=thread.env, subagents=thread.subagents,
+        id=thread.id, llm=thread.llm, tools=thread._tools, env=thread.env, subagents=thread.subagents,
         workspace_name=ws.name, initial_messages_count=len(thread.messages),
-        first_user_message_preview=thread.get_first_user_message_preview()
+        first_user_message_preview=thread.get_first_user_message_preview(),
+        agent_id=thread_data.agent_id
     )
 
 @app.get("/workspaces/{workspace_name}/threads", response_model=List[ThreadResponse])
@@ -537,12 +544,13 @@ async def list_threads_api(ws: Workspace = Depends(get_workspace_dependency)):
             thread_preview_instance = ws.get_thread(id=t_id)
             first_user_message_preview = thread_preview_instance.get_first_user_message_preview()
             thread_responses.append(ThreadResponse(
-                id=thread_preview_instance.id, model=thread_preview_instance.model, 
+                id=thread_preview_instance.id, llm=thread_preview_instance.llm, 
                 tools=thread_preview_instance._tools, 
                 env=thread_preview_instance.env,
                 subagents=thread_preview_instance.subagents, workspace_name=ws.name, 
                 initial_messages_count=len(thread_preview_instance.messages),
-                first_user_message_preview=first_user_message_preview
+                first_user_message_preview=first_user_message_preview,
+                agent_id=thread_preview_instance.agent_id
             ))
         except Exception as e:
             logger.error(f"Error loading thread {t_id} in {ws.name} for listing: {e}", exc_info=True)
@@ -555,10 +563,11 @@ async def get_thread_details_api(workspace_name: str, thread_id: str, ws: Worksp
     api_messages = [ApiChatMessage.from_chat_message(msg) for msg in thread.messages]
     first_user_message_preview = thread.get_first_user_message_preview()
     return ThreadDetailResponse(
-        id=thread.id, model=thread.model, tools=thread._tools, env=thread.env, subagents=thread.subagents,
+        id=thread.id, llm=thread.llm, tools=thread._tools, env=thread.env, subagents=thread.subagents,
         workspace_name=ws.name, messages=api_messages, 
         initial_messages_count=len(thread.messages),
-        first_user_message_preview=first_user_message_preview
+        first_user_message_preview=first_user_message_preview,
+        agent_id=thread.agent_id
     )
 
 

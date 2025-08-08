@@ -187,7 +187,8 @@ class Workspace:
             workspace=self,
             subagents=data.get("subagents", []),
             id=id,
-            hooks=data.get("hooks", [])
+            hooks=data.get("hooks", []),
+            agent_id=data.get("agent_id")  # Load the agent_id if present
         )
         for thread_id_sub in data.get("thread_ids", []):
             try:

@@ -59,7 +59,7 @@ export interface Workspace {
 // Corresponds to AgentResponse in api/main.py
 export interface Agent {
   id: string;
-  model: string;
+  llm: Record<string, any>;  // Changed from model: string to llm: Dict
   prompt_template: string; // Changed from prompt_template_yaml based on AgentResponse in main.py
   tools: string[];
   env: Record<string, string>;
@@ -72,13 +72,14 @@ export interface Agent {
 // Corresponds to ThreadResponse in api/main.py
 export interface ThreadSummary {
   id: string;
-  model: string;
+  llm: Record<string, any>;  // Changed from model: string to llm: Dict
   tools: string[];
   env: Record<string, string>;
   subagents: string[];
   workspace_name: string;
   initial_messages_count: number; 
   first_user_message_preview?: string;
+  agent_id?: string;  // Added to track which agent created the thread
 }
 
 // Corresponds to ThreadDetailResponse in api/main.py
@@ -95,7 +96,7 @@ export interface WorkspaceCreatePayload {
 // For creating an agent (corresponds to AgentCreate)
 export interface AgentCreatePayload {
   id: string;
-  model: string;
+  llm: Record<string, any>;  // Changed from model: string to llm: Dict
   prompt_template_yaml: string;
   tools?: string[] | null;
   env?: Record<string, string> | null;

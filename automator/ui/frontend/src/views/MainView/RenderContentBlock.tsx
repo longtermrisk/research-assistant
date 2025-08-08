@@ -183,7 +183,7 @@ export const RenderContentBlock: React.FC<RenderContentBlockProps> = ({
         </div>
       );
     }
-    default:
+    default:      
       return (
         <div key={index} className="unknown-block">
           Unsupported block type

@@ -16,7 +16,7 @@ const AgentManagementView: React.FC = () => {
   const initialDefaultModel = 'claude-sonnet-4-20250514';
   const initialNewAgentState: Partial<AgentCreatePayload> = {
     id: '',
-    model: initialDefaultModel,
+    llm: { model: initialDefaultModel, temperature: 0.7 },  // Changed to llm dict
     prompt_template_yaml: 'chatgpt.yaml',
     tools: [],
     subagents: [],
@@ -63,13 +63,20 @@ const AgentManagementView: React.FC = () => {
         try {
           const models = await api.listModels(); 
           setAvailableModels(models);
-          // Set default model from fetched models if current newAgent.model is not in the list or not set
+          // Set default model from fetched models if current newAgent.llm.model is not in the list or not set
           if (models.length > 0) {
-            if (!newAgent.model || !models.includes(newAgent.model)) {
-                 setNewAgent(prev => ({ ...prev, model: models.includes(initialDefaultModel) ? initialDefaultModel : models[0] }));
+            const currentModel = newAgent.llm?.model;
+            if (!currentModel || !models.includes(currentModel)) {
+                 setNewAgent(prev => ({ 
+                   ...prev, 
+                   llm: { 
+                     ...prev.llm,
+                     model: models.includes(initialDefaultModel) ? initialDefaultModel : models[0] 
+                   }
+                 }));
             }
           } else {
-            setNewAgent(prev => ({ ...prev, model: undefined })); // No models available
+            setNewAgent(prev => ({ ...prev, llm: { ...prev.llm, model: undefined } })); // No models available
           }
         } catch (err: any) {
           console.error("Failed to fetch models:", err);
@@ -122,10 +129,24 @@ const AgentManagementView: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setNewAgent(prev => ({
-      ...prev,
-      [name]: value,
-    }));
+    
+    // Special handling for llm-related fields
+    if (name === 'model' || name === 'temperature' || name === 'reasoning_effort') {
+      setNewAgent(prev => ({
+        ...prev,
+        llm: {
+          ...prev.llm,
+          ...(name === 'model' ? { model: value } : {}),
+          ...(name === 'temperature' ? { temperature: parseFloat(value) } : {}),
+          ...(name === 'reasoning_effort' ? { reasoning: { effort: value } } : {}),
+        }
+      }));
+    } else {
+      setNewAgent(prev => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   const handleMultiSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -141,7 +162,7 @@ const AgentManagementView: React.FC = () => {
 
   const handleCreateAgent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentWorkspace || !newAgent.id || !newAgent.model || !newAgent.prompt_template_yaml) {
+    if (!currentWorkspace || !newAgent.id || !newAgent.llm?.model || !newAgent.prompt_template_yaml) {
       setError('Agent ID, Model, and Prompt Template YAML are required.');
       return;
     }
@@ -150,7 +171,7 @@ const AgentManagementView: React.FC = () => {
     try {
       const payload: AgentCreatePayload = {
         id: newAgent.id!,
-        model: newAgent.model!,
+        llm: newAgent.llm!,  // Now passing the full llm dict
         prompt_template_yaml: newAgent.prompt_template_yaml!,
         tools: newAgent.tools || [],
         env: newAgent.env || {}, // Assuming env could be added later as a JSON textarea
@@ -207,7 +228,7 @@ const AgentManagementView: React.FC = () => {
                 <select 
                   name="model" 
                   id="model" 
-                  value={newAgent.model || ''} 
+                  value={newAgent.llm?.model || ''} 
                   onChange={handleInputChange} 
                   required 
                   disabled={isLoadingModels}
@@ -217,6 +238,34 @@ const AgentManagementView: React.FC = () => {
                   {!isLoadingModels && availableModels.map(modelName => (
                     <option key={modelName} value={modelName}>{modelName}</option>
                   ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="temperature">Temperature</label>
+                <input 
+                  type="number" 
+                  name="temperature" 
+                  id="temperature" 
+                  value={newAgent.llm?.temperature || 0.7} 
+                  onChange={handleInputChange}
+                  min="0"
+                  max="2"
+                  step="0.1"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="reasoning_effort">Reasoning Effort (for thinking models)</label>
+                <select 
+                  name="reasoning_effort" 
+                  id="reasoning_effort" 
+                  value={newAgent.llm?.reasoning?.effort || ''} 
+                  onChange={handleInputChange}
+                >
+                  <option value="">None</option>
+                  <option value="minimal">Minimal</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
                 </select>
               </div>
               <div className="form-group full-width">
@@ -294,7 +343,13 @@ const AgentManagementView: React.FC = () => {
             {agents.map(agent => (
               <li key={agent.id} className="agent-item">
                 <h3>{agent.id}</h3>
-                <p><strong>Model:</strong> {agent.model}</p>
+                <p><strong>Model:</strong> {agent.llm?.model || 'Not specified'}</p>
+                {agent.llm?.temperature !== undefined && (
+                  <p><strong>Temperature:</strong> {agent.llm.temperature}</p>
+                )}
+                {agent.llm?.reasoning?.effort && (
+                  <p><strong>Reasoning Effort:</strong> {agent.llm.reasoning.effort}</p>
+                )}
                 {/* In AgentResponse, prompt_template is the resolved prompt, not the yaml path */}
                 <p><strong>Prompt Template:</strong> {agent.prompt_template}</p> 
                 {agent.tools && agent.tools.length > 0 && (

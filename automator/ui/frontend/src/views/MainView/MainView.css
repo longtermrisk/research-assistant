@@ -7,6 +7,36 @@
   /* font-family: var(--font-family-serif); */
 }
 
+/* Agent info header */
+.agent-info-header {
+  padding: 10px 15px;
+  background-color: var(--background-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.agent-info-header h3 {
+  margin: 0;
+  color: var(--foreground-primary);
+  font-size: 1.1em;
+}
+
+.agent-info-header span {
+  color: var(--foreground-secondary);
+  font-size: 0.9em;
+}
+
+.agent-model {
+  font-weight: 500;
+}
+
+.agent-temperature,
+.agent-reasoning {
+  font-style: italic;
+}
+
 .loading-chat, .error-message {
   padding: 20px;
   text-align: center;

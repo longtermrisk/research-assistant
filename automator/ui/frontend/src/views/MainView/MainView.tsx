@@ -355,7 +355,7 @@ const MainView: React.FC = () => {
                 onClick={() => handleAgentSelectionForNewThread(agent.id)}
                 className="agent-select-button"
               >
-                {agent.id} ({agent.model})
+                {agent.id} ({agent.llm?.model || 'No model'})
               </button>
             ))}
           </div>
@@ -383,9 +383,27 @@ const MainView: React.FC = () => {
     return true;
   });
 
+  // Find the agent name if we have a thread
+  const currentAgentName = currentThread?.agent_id || selectedAgentForNewThread || null;
+  const currentAgent = availableAgents.find(a => a.id === currentAgentName);
+
   return (
     <AppLayout>
       <div className="chat-view-container">
+        {/* Display agent info at the top */}
+        {currentAgent && (
+          <div className="agent-info-header">
+            <h3>Agent: {currentAgent.id}</h3>
+            <span className="agent-model">Model: {currentAgent.llm?.model || 'Not specified'}</span>
+            {currentAgent.llm?.temperature !== undefined && (
+              <span className="agent-temperature"> | Temperature: {currentAgent.llm.temperature}</span>
+            )}
+            {currentAgent.llm?.reasoning?.effort && (
+              <span className="agent-reasoning"> | Reasoning: {currentAgent.llm.reasoning.effort}</span>
+            )}
+          </div>
+        )}
+        
         {isLoading && !processedMessages.length && !threadId && (
           <div className="loading-chat">Preparing new chat...</div>
         )}
