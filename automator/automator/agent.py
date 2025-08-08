@@ -42,10 +42,10 @@ def load_json(path):
 _SERVERS = load_json("~/mcp.json").get('mcpServers', {})
 
 _ALIAS = {
-    'sota':  'gpt-5',
-    'sota-thinking': 'gpt-5-thinking',
-    'opus': 'claude-opus-4-1',
-    'sonnet': 'claude-sonnet-4-0',
+    'default': 'claude-opus-4-1-20250805',
+    'gpt-5':  'gpt-5',
+    'opus': 'claude-opus-4-1-20250805',
+    'sonnet': 'claude-sonnet-4-20250514',
     'gemini': 'gemini-2.5-pro'
 }
 
@@ -97,20 +97,6 @@ class Agent:
         # Apply any additional llm overrides
         if llm_overrides:
             thread_llm.update(llm_overrides)
-            
-        # Set defaults if not specified
-        if 'temperature' not in thread_llm:
-            thread_llm['temperature'] = 0.7
-        if 'max_tokens' not in thread_llm:
-            model = thread_llm.get('model', '')
-            if 'haiku' in model:
-                thread_llm['max_tokens'] = 4000
-            elif 'gemini' in model:
-                thread_llm['max_tokens'] = 64000
-            elif 'claude' in model:
-                thread_llm['max_tokens'] = 32000
-            else:
-                thread_llm['max_tokens'] = 64000
 
         _vars = dict(**self.prompt_template_vars, **prompt_template)
         messages_to_apply = {"query": query} if query is not None else {}

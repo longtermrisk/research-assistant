@@ -70,7 +70,7 @@ def workspace_create_expert(args):
     expert = Agent(
         id=args.github_repo.split('/')[-1],
         workspace=workspace,
-        model='gemini-2.5-pro',
+        llm={'model': 'gemini'},
         prompt_template_yaml=f"{args.prompt}.yaml",
         tools=["terminal.get_file", "terminal.list_codebase_files"],
         hooks=hooks,
