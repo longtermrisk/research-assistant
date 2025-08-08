@@ -81,7 +81,7 @@ def simplify_html(
 
 def clean_ansi(text):
     # Step 1: Remove ANSI escape sequences
-    ansi_escape = re.compile(r'\x1b\[[0-9;]*[mGKHF]')
+    ansi_escape = re.compile(r'(?:\x1B[@-Z\\-_]|\x1B\[.*?[ -/]*[@-~])')
     text = ansi_escape.sub('', text)
     
     # Step 2: Split into lines and process terminal control characters

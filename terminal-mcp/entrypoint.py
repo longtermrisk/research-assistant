@@ -49,9 +49,6 @@ if __name__ == "__main__":
     from jupyter import jupyter # noqa: F401 – imported for side effects
     import editor # noqa: F401 – imported for side effects
 
-
-    # Create .logs/ if not exists
-    os.makedirs(os.path.join(CWD, ".logs"), exist_ok=True)
     print("Starting Terminal MCP Server…", file=sys.stderr)
     try:
         mcp.run(transport="stdio")
