@@ -11,7 +11,7 @@ async def main() -> None:
     workspace = Workspace('my-workspace')
     bash_agent = Agent(
         llm={"model": "gemini-2.5-pro"},
-        prompt_template_yaml="chatgpt.yaml",
+        prompt_template_yaml="assistant.yaml",
         tools=["terminal.*",]
     )
     bash_agent = workspace.add_agent(agent=bash_agent, id="bash")

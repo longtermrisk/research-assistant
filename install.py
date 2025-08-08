@@ -105,7 +105,7 @@ def setup_frontend():
         cd frontend
         npm install
     """
-    path = os.path.join(os.path.dirname(__file__), 'automator/frontend')
+    path = os.path.join(os.path.dirname(__file__), 'automator/ui/frontend')
     os.chdir(path)
     subprocess.run(['npm', 'install'], check=True)
 
@@ -136,11 +136,11 @@ def start_backend():
         cd backend
         .venv/bin/python -m uvicorn automator.api.main:app --port 8000 &> ../backend.logs (in the background)
     """
-    path = os.path.join(os.path.dirname(__file__), 'automator')
+    path = os.path.join(os.path.dirname(__file__), 'automator/ui')
     os.chdir(path)
     python_path = os.path.join(path, '.venv', 'bin', 'python')
     subprocess.Popen(
-        [python_path, '-m', 'uvicorn', 'automator.api.main:app', '--port', '8000'],
+        [python_path, '-m', 'uvicorn', 'api.main:app', '--port', '8000'],
         stdout=open('../backend.logs', 'a'),
         stderr=subprocess.STDOUT
     )
