@@ -25,8 +25,7 @@ from localrouter import (
     PromptTemplate,
     ChatMessage,
     MessageRole,
-    get_response
-    # get_response_with_backoff as get_response
+    get_response_with_backoff as get_response
 )
 from automator.hooks import load_hooks, _HOOKS
 
@@ -42,7 +41,7 @@ def load_json(path):
 _SERVERS = load_json("~/mcp.json").get('mcpServers', {})
 
 _ALIAS = {
-    'default': 'claude-opus-4-1-20250805',
+    'default': 'claude-sonnet-4-20250514',
     'gpt-5':  'gpt-5',
     'opus': 'claude-opus-4-1-20250805',
     'sonnet': 'claude-sonnet-4-20250514',
