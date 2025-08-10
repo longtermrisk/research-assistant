@@ -40,6 +40,15 @@
                 "OPENWEIGHTS_API_KEY": "$OPENWEIGHTS_API_KEY",
                 "HF_TOKEN": "$HF_TOKEN"
             }
+        },
+        "browser": {
+            "command": "uv",
+            "args": [
+                "--directory",
+                "/app/browser-mcp",
+                "run",
+                "browser_mcp.py"
+            ]
         }
     }
 }
