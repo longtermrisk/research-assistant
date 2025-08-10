@@ -1,0 +1,65 @@
+# Environment files (security)
+.env
+.env.local
+.env.production
+.env.development
+*.env
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+node_modules/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+*.logs
+backend.logs
+frontend.logs
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Test artifacts
+.pytest_cache/
+.tox/
+
+# Documentation builds
+docs/_build/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/

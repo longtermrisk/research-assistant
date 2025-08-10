@@ -1,0 +1,55 @@
+# Stage 1: Base image with Python, Node.js, and uv
+FROM python:3.11-slim as base
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/root/.local/bin:$PATH"
+
+# Install base system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    build-essential \
+    ca-certificates \
+    gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 18 from NodeSource, which is more reliable than default repos
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs
+
+# Install uv - the Python package manager
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+
+# Stage 2: Application setup and dependency installation
+FROM base as app
+WORKDIR /app
+
+# Copy the entire repository content into the image
+COPY . .
+
+# Install Python dependencies for each component separately
+# This mirrors the structure of install.py
+RUN uv pip install --system -e ./terminal-mcp && \
+    uv pip install --system -e ./web-mcp && \
+    uv pip install --system -e ./talk-to-model && \
+    uv pip install --system ./automator"[all]"
+
+# Install frontend dependencies
+RUN cd automator/ui/frontend && npm install
+
+# Create required automator directories and copy prompts
+RUN mkdir -p /root/.automator/workspaces && \
+    cp -r automator/prompts /root/.automator/
+
+# Make entrypoint and test scripts executable
+RUN chmod +x /app/entrypoint.sh /app/docker_test.py /app/configure_mcp.py
+
+# Expose the ports for the backend and frontend
+EXPOSE 8000 5173
+
+# Set the entrypoint to our custom script
+ENTRYPOINT ["/app/entrypoint.sh"]
+
+# Set a default command (can be overridden)
+CMD []

@@ -2,6 +2,55 @@
 
 This file provides guidance to LLMs when working with code in this repository.
 
+## RAG Integration Available
+
+The `rag/` directory contains the Light-RAG system - a lightweight Retrieval-Augmented Generation system inspired by attention mechanisms that can enhance automator agents with contextual document retrieval.
+
+### Key RAG Features
+- **Document ingestion** with OpenAI-powered key generation and summarization
+- **Persistent storage** using FileSystemStore with full serialization
+- **Intelligent reranking** using OpenAI's structured outputs
+- **Hook integration** with automator agents for automatic document retrieval
+- **Context-aware retrieval** based on conversation history
+
+### Automator Integration
+The RAG system has been successfully merged into the main automator repository as a sibling package:
+
+**Directory Structure:**
+```
+automator/
+├── automator/          # Core Python package
+├── rag/                # RAG package (sibling)
+├── ui/                 # Frontend code
+├── examples/rag/       # RAG examples
+├── tests/rag/          # RAG tests
+└── docs/               # Documentation including rag.md
+```
+
+**Installation Options:**
+- `pip install -e .` - Core functionality only
+- `pip install -e .[rag]` - Core + RAG capabilities  
+- `pip install -e .[ui]` - Core + UI build tools
+- `pip install -e .[dev]` - Core + development tools
+- `pip install -e .[all]` - Everything
+
+**RAG Hook Usage:**
+```python
+from automator import Agent
+from rag import create_rag_hook  # Only if [rag] installed
+
+agent = Agent(
+    model="gpt-4.1",
+    hooks=['rag:.knowledge']  # Enable RAG for .knowledge directory
+)
+```
+
+The RAG system automatically:
+1. Ingests documents from specified directories
+2. Retrieves relevant documents based on conversation context  
+3. Adds document content to agent message history
+4. Tracks document relevance across conversation turns
+
 ## Repository Architecture
 
 This is a **Research-Assistant** monorepo containing an MCP-based LLM agent system with multiple interconnected components:
