@@ -52,7 +52,7 @@ def create_rag_hook(path='.knowledge', n_retrieved_docs=10):
         else:
             absolute_path = thread.home / path
         store = get_store(absolute_path)
-        await store.ingest_dir(absolute_path, existing_source='ignore')
+        await store.ingest_dir(absolute_path, existing_source='update')
         set_context(thread, store)
         # Retrieve documents
         docs = await store.query(history=thread.messages_after_hooks, top_k=5)

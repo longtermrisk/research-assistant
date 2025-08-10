@@ -425,7 +425,7 @@ class OpenAIReranker(Reranker):
         sources = [doc.meta.source or f"document_{i}" for i, doc in enumerate(documents)]
         if sources and all(isinstance(s, str) for s in sources):
             # Find the common prefix path
-            common_prefix = os.path.commonpath([s for s in sources if os.path.isabs(s)])
+            common_prefix = os.path.commonpath(sources)
             # If there is a common prefix, we'll use relative paths
             use_relative = bool(common_prefix and common_prefix != '/')
         else:
@@ -771,7 +771,6 @@ class DocumentStore(ABC):
         
         if not valid_documents:
             return []
-        
         # Handle existing sources for update mode
         await _handle_existing_sources(self, valid_documents, existing_source)
         
