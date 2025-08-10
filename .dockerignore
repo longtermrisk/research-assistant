@@ -1,26 +1,22 @@
-# Environment files (security)
-.env
-.env.local
-.env.production
-.env.development
-*.env
+# Version control
+.git
+.gitignore
 
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
-node_modules/
-
-# Build artifacts
-build/
-dist/
-*.egg-info/
-__pycache__/
+# Python
+__pycache__
 *.pyc
 *.pyo
 *.pyd
 .Python
+*.so
+.pytest_cache
+*.egg-info
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
 
 # IDE files
 .vscode/
@@ -32,34 +28,28 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Git
-.git/
-.gitignore
-
 # Logs
 *.log
-*.logs
 backend.logs
 frontend.logs
 
-# Jupyter checkpoints
-.ipynb_checkpoints/
+# Node.js (for frontend)
+node_modules/
+npm-debug.log
+yarn-error.log
 
-# Coverage reports
-htmlcov/
-.coverage
-.coverage.*
-coverage.xml
+# Build artifacts
+dist/
+build/
 
-# Test artifacts
-.pytest_cache/
-.tox/
-
-# Documentation builds
-docs/_build/
+# Local config files
+.env
+.env.local
 
 # Temporary files
 *.tmp
 *.temp
-temp/
-tmp/
+
+# Documentation that's not needed in container
+*.md
+!DOCKER_README.md

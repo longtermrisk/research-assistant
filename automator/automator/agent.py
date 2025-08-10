@@ -258,6 +258,27 @@ class Thread:
         self.gather_subagent_tools()
         self._ready = True; logger.info(f"Thread '{self.id}' Connected and Prepared.")
 
+    def resolve_env_vars(self, env_config: Dict[str, str], agent_env: Dict[str, str]) -> Dict[str, str]:
+        """Resolve environment variables in MCP server config.
+        
+        If env_config has values like "$OPENAI_API_KEY", replace with actual values
+        from agent's environment or system environment.
+        """
+        resolved_env = {}
+        for key, value in env_config.items():
+            if isinstance(value, str) and value.startswith('$'):
+                env_var_name = value[1:]  # Remove the $ prefix
+                # First check agent's env, then system environment
+                resolved_value = agent_env.get(env_var_name) or os.environ.get(env_var_name)
+                if resolved_value:
+                    resolved_env[key] = resolved_value
+                else:
+                    logger.warning(f"Environment variable {env_var_name} not found for MCP server config key {key}")
+                    resolved_env[key] = value  # Keep original if not found
+            else:
+                resolved_env[key] = value
+        return resolved_env
+
     async def connect_to_servers(self, tool_specs: List[str], base_env: Dict[str, str]):
         for tool_id_spec in tool_specs:
             server_id, tool_name_filter = tool_id_spec.split(".", 1)
@@ -269,7 +290,10 @@ class Thread:
                 transport = server_config.get('transport', 'stdio')  # Default to stdio for backward compatibility
                 
                 if transport == 'stdio':
-                    effective_env = {**(server_config.get('env', {})), **base_env}
+                    # Resolve environment variables from mcp.json
+                    server_env = server_config.get('env', {})
+                    resolved_server_env = self.resolve_env_vars(server_env, {**self.env, **base_env})
+                    effective_env = {**resolved_server_env, **base_env}
                     command, args = maybe_handle_docker_command(server_config['command'], server_config['args'], effective_env)
 
                     threads_root = self.workspace._root_dir

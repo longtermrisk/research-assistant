@@ -1,24 +1,25 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "terminal-mcp"
 version = "0.1.0"
-description = "A simple terminal MCP server"
+description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "mcp>=1.6.0",
+    "anthropic>=0.51.0",
+    "beautifulsoup4>=4.13.4",
+    "gitpython>=3.1.44",
+    "httpx>=0.28.1",
     "ipykernel>=6.29.5",
     "ipython>=9.2.0",
-    "jupyterlab>=4.4.2",
+    "jupyterlab>=4.4.3",
+    "matplotlib>=3.10.1",
+    "mcp[cli]>=1.6.0",
+    "nbclient>=0.10.2",
+    "nbformat>=5.10.4",
+    "numpy>=2.2.5",
+    "openai>=1.78.0",
     "pandas>=2.2.3",
-    "matplotlib>=3.10.3",
-    "watchdog>=6.0.0",
-    "isignored>=0.1.1",
-    "pydantic"
+    "pexpect>=4.9.0",
+    "pillow>=11.2.1",
+    "pip>=25.1.1",
 ]
-
-[tool.setuptools.packages.find]
-where = ["src"]

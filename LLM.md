@@ -80,13 +80,36 @@ python install.py  # Sets up entire repository including dependencies and MCP co
 # Individual component setup (run in component directory)
 uv sync
 
-# Frontend development (in automator/frontend/)
+# Frontend development (in automator/ui/frontend/)
 npm run dev          # Start development server (localhost:5173)
 npm run build        # Build for production
 npm run lint         # Run ESLint
 
-# Backend development (in automator/)
-uvicorn automator.api.main:app --port 8000  # Start FastAPI server
+# Backend development (in automator/ui)
+uvicorn api.main:app --port 8000  # Start FastAPI server
+```
+
+### Testing
+```bash
+# Navigate to automator directory
+cd automator
+
+# Install with dev dependencies
+pip install -e .[dev]
+
+# Run all tests
+pytest
+
+# Run specific test categories
+pytest tests/test_quickstart.py    # Basic agent and terminal functionality
+pytest tests/test_rag_hook.py      # RAG integration tests (requires [rag] dependencies)
+pytest tests/test_system.py        # Core system tests
+
+# Run with verbose output
+pytest -v
+
+# Run excluding RAG tests if dependencies not available
+pytest -m "not rag"
 ```
 
 ### Agent Usage Examples
@@ -105,12 +128,6 @@ python more_examples/evaluator.py
 ### MCP Server Configuration
 - `mcp.json`: Template for MCP server definitions (gets copied to `~/mcp.json`)
 - Each MCP server runs via: `uv --directory /path/to/server run entrypoint.py`
-
-### Agent Prompt Templates (automator/prompts/)
-- `chatgpt.yaml`: Basic conversational assistant
-- `swe.yaml`: Software engineering focused agent
-- `deep_research.yaml`: Research-oriented agent
-- `evaluator.yaml`: Model evaluation and comparison
 
 ### Environment Setup
 - API keys configured through `~/mcp.json` and propagated to `.env`

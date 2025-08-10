@@ -1,63 +1,44 @@
 {
     "mcpServers": {
         "terminal": {
-            "command": "/path/to/uv",
+            "command": "uv",
             "args": [
                 "--directory",
-                "/path/to/repo/terminal-mcp",
+                "/app/terminal-mcp",
                 "run",
                 "entrypoint.py"
             ],
             "env": {
-                "OPENAI_API_KEY": "...",
-                "HF_TOKEN": "...",
-                "OPENWEIGHTS_API_KEY": "...",
-                "ANTHROPIC_API_KEY": "..."
-            }
-        },
-        "terminal-sandboxed": {
-            "command": "docker",
-            "args": [
-                "run",
-                "--rm",
-                "-i",
-                "-v",
-                "$CWD:/workspace",
-                "-w",
-                "/workspace",
-                "nielsrolf/terminal-mcp:latest"
-            ],
-            "env": {
-                "OPENAI_API_KEY": "...",
-                "HF_TOKEN": "...",
-                "OPENWEIGHTS_API_KEY": "...",
-                "ANTHROPIC_API_KEY": "..."
+                "OPENAI_API_KEY": "$OPENAI_API_KEY",
+                "HF_TOKEN": "$HF_TOKEN",
+                "OPENWEIGHTS_API_KEY": "$OPENWEIGHTS_API_KEY",
+                "ANTHROPIC_API_KEY": "$ANTHROPIC_API_KEY"
             }
         },
         "web": {
-            "command": "/path/to/uv",
+            "command": "uv",
             "args": [
                 "--directory",
-                "/path/to/repo/web-mcp",
+                "/app/web-mcp",
                 "run",
                 "web.py"
             ],
             "env": {
-                "SERP_API_KEY": "google search api key"
+                "SERP_API_KEY": "$SERP_API_KEY"
             }
         },
         "talk2model": {
-            "command": "/path/to/uv",
+            "command": "uv",
             "args": [
                 "--directory",
-                "/path/to/repo/talk-to-model",
+                "/app/talk-to-model",
                 "run",
                 "talk_to_model.py"
             ],
             "env": {
-                "OPENAI_API_KEY": "openai api key",
-                "OPENWEIGHTS_API_KEY": "openweights api key",
-                "HF_TOKEN": "huggingface token"
+                "OPENAI_API_KEY": "$OPENAI_API_KEY",
+                "OPENWEIGHTS_API_KEY": "$OPENWEIGHTS_API_KEY",
+                "HF_TOKEN": "$HF_TOKEN"
             }
         }
     }

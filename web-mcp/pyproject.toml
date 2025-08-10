@@ -1,21 +1,18 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "web-mcp"
+name = "websearch-mcp"
 version = "0.1.0"
-description = "A simple web MCP server"
+description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "mcp>=1.6.0",
-    "beautifulsoup4",
-    "duckduckgo-search",
-    "fastapi",
-    "uvicorn",
-    "pydantic"
+    "markdownify>=1.1.0",
+    "mcp[cli]>=1.6.0",
+    "python-dotenv>=1.1.0",
+    "requests>=2.32.3",
+    "serpapi>=0.1.5",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.uv.workspace]
+members = [
+    "mcp-client",
+]
