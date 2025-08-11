@@ -51,6 +51,20 @@ The RAG system automatically:
 3. Adds document content to agent message history
 4. Tracks document relevance across conversation turns
 
+## Recent Improvements - Terminal MCP Server
+
+**Output Management & Search Capabilities** (Latest):
+- **Intelligent Output Truncation**: Added tiktoken-based token counting to automatically truncate outputs > 4k tokens
+  - Keeps first 1k + last 3k tokens with clear truncation indicators
+  - Saves full output to `./tool_output/` with timestamped filenames
+  - Applied to all terminal.py and editor.py functions
+- **Find Tool**: New `find(search_str, path)` tool with glob pattern support
+  - Search through files using patterns like `*.py`, `**/*.js`, `tool_output/*.txt`
+  - Case-insensitive search with highlighted matches and line numbers
+  - Integrated with truncated output workflow for easy access to full content
+- **Files Added**: `output_manager.py`, `find_tool.py`, comprehensive test suite
+- **Files Modified**: All major output functions in terminal.py and editor.py now use smart truncation
+
 ## Repository Architecture
 
 This is a **Research-Assistant** monorepo containing an MCP-based LLM agent system with multiple interconnected components:

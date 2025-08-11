@@ -41,13 +41,9 @@ def setup_mcp_dot_json():
     with open(os.path.join(os.path.dirname(__file__), 'mcp.json'), 'r') as f:
         mcp_json = f.read()
     
-    # Replace '/path/to/uv' with the actual path to uv
-    uv_path = subprocess.run(['which', 'uv'], capture_output=True, text=True).stdout.strip()
-    mcp_json = mcp_json.replace('/path/to/uv', uv_path)
-    
-    # Replace '/path/to/repo/' with the actual path to the repository
+    # Replace '/app with the actual path to the repository
     repo_path = os.path.dirname(os.path.abspath(__file__))
-    mcp_json = mcp_json.replace('/path/to/repo', repo_path)
+    mcp_json = mcp_json.replace('/app', repo_path)
 
     mcp_data = json.loads(mcp_json)
     confirmed_env = {}

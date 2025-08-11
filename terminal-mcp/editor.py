@@ -15,6 +15,7 @@ import difflib
 from mcp.server.fastmcp import Context, Image
 from mcp.types import TextContent
 from static_code_analysis import analyze_and_format
+from output_manager import truncate_output
 from server import mcp
 
 
@@ -193,7 +194,16 @@ async def get_file(path: str, ctx: Context = None) -> Union[str, Image, List[Uni
     if os.path.isdir(abs_path):
         try:
             entries = [e for e in os.listdir(abs_path) if not e.startswith('.')]
-            return "Directory Listing for: " + path + "\n" + "\n".join(entries)
+            listing_text = "Directory Listing for: " + path + "\n" + "\n".join(entries)
+            
+            # Apply truncation if directory listing is very long
+            truncated_listing, full_output_path, was_truncated = truncate_output(listing_text)
+            
+            if was_truncated:
+                find_instructions = f"\n\n[Note: Directory listing was truncated due to length. Full listing saved to {full_output_path}. You can use the find tool to search: find(search_str=\"filename\", path=\"{full_output_path}\")]"
+                truncated_listing += find_instructions
+            
+            return truncated_listing
         except OSError as exc:
             return f"Error listing directory {path}: {exc}"
 
@@ -214,20 +224,53 @@ async def get_file(path: str, ctx: Context = None) -> Union[str, Image, List[Uni
             df = pd.read_csv(abs_path)
             buf = io.StringIO()
             df.info(buf=buf)
-            return f"CSV Info for: {path}\n\n{buf.getvalue()}"
+            csv_info = f"CSV Info for: {path}\n\n{buf.getvalue()}"
+            
+            # Apply truncation if CSV info is very long
+            truncated_info, full_output_path, was_truncated = truncate_output(csv_info)
+            
+            if was_truncated:
+                find_instructions = f"\n\n[Note: CSV info was truncated due to length. Full info saved to {full_output_path}. You can use the find tool to search: find(search_str=\"column_name\", path=\"{full_output_path}\")]"
+                truncated_info += find_instructions
+            
+            return truncated_info
         except Exception as exc:
             return f"Error reading CSV {path}: {exc}"
 
     if ext == ".ipynb":
-        return open_jupyter_notebook(abs_path)
+        nb_blocks = open_jupyter_notebook(abs_path)
+        # If it's a list of blocks, convert to text and apply truncation
+        if isinstance(nb_blocks, list) and len(nb_blocks) > 0:
+            # Convert blocks to text (ignoring images for now)
+            text_blocks = [block for block in nb_blocks if isinstance(block, str)]
+            if text_blocks:
+                nb_text = "\n".join(text_blocks)
+                truncated_nb, full_output_path, was_truncated = truncate_output(nb_text)
+                
+                if was_truncated:
+                    find_instructions = f"\n\n[Note: Notebook content was truncated due to length. Full content saved to {full_output_path}. You can use the find tool to search: find(search_str=\"your_search\", path=\"{full_output_path}\")]"
+                    # Return as a list with truncated text and original images
+                    image_blocks = [block for block in nb_blocks if not isinstance(block, str)]
+                    return [truncated_nb + find_instructions] + image_blocks
+        
+        return nb_blocks
 
     try:
         with open(abs_path, "r", encoding="utf-8") as f:
             text = f.read()
+            
+            # Apply output truncation with token counting
+            truncated_text, full_output_path, was_truncated = truncate_output(text)
+            
+            # Add find tool instructions if content was truncated
+            if was_truncated:
+                find_instructions = f"\n\n[Note: File content was truncated due to length. Full content saved to {full_output_path}. You can use the find tool to search through the full content: find(search_str=\"your_search\", path=\"{full_output_path}\")]"
+                truncated_text += find_instructions
+            
             return TextContent(
-                text=text,
+                text=truncated_text,
                 type="text",
-                annotations={'display_html': f"<pre>{text}</pre>"}
+                annotations={'display_html': f"<pre>{truncated_text}</pre>"}
             )
     except UnicodeDecodeError:
         return f"Error: Cannot decode file {path} as UTF-8."
@@ -516,7 +559,16 @@ async def list_codebase_files(
         
 
         files.sort(key=sort_key)
-        return files # Return the list of relative paths
+        
+        # Convert list to string for token counting and potential truncation
+        files_text = "\n".join(files)
+        truncated_files, full_output_path, was_truncated = truncate_output(files_text)
+        
+        if was_truncated:
+            find_instructions = f"\n\n[Note: File list was truncated due to length. Full list saved to {full_output_path}. You can use the find tool to search: find(search_str=\"filename_pattern\", path=\"{full_output_path}\")]"
+            return truncated_files + find_instructions
+        
+        return files_text
 
     except Exception as e:
         # Log the error maybe? ctx.error(...) ?
