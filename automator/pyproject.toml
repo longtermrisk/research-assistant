@@ -1,7 +1,7 @@
 [project]
 name = "automator"
 version = "0.1.0"
-description = "MCP-based LLM agent system"
+description = "MCP-based LLM agent system with optional RAG integration"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -21,6 +21,27 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ui = [
+    # Frontend dependencies (npm/node handled separately)
+]
+
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "black>=24.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
+]
+
+rag = [
+    "openai>=1.84.0",
+    "pydantic>=2.11.5",
+    "tiktoken>=0.9.0",
+    "numpy>=2.2.6",
+]
+
+all = ["automator[ui,dev,rag]"]
+
 sse = [
     "httpx>=0.27.0",
     "sse-starlette>=2.0.0",
@@ -28,8 +49,9 @@ sse = [
 
 [project.scripts]
 ra = "automator.cli:main"
+
 [tool.setuptools]
-packages = ["automator"]
+packages = ["automator", "rag"]
 
 [tool.uv.workspace]
 members = [

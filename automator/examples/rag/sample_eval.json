@@ -1,0 +1,81 @@
+[
+  {
+    "test_case_id": 1,
+    "query": "What is the message streaming format used by the automator API?",
+    "correct": [
+      "automator/ui/api/main.py",
+      "automator/ui/frontend/src/views/MainView/MainView.tsx",
+      "automator/ui/frontend/src/types/index.ts"
+    ]
+  },
+  {
+    "test_case_id": 2,
+    "query": "How are documents ranked in the RAG system?",
+    "correct": [
+      "rag/rag.py"
+    ]
+  },
+  {
+    "test_case_id": 3,
+    "query": "What are the available embedder implementations?",
+    "correct": [
+      "rag/rag.py",
+      "rag/LLM.md"
+    ]
+  },
+  {
+    "test_case_id": 4,
+    "query": "which jupyter kernel does the jupyter tool use?",
+    "correct": [
+      "terminal-mcp/jupyter.py",
+      "terminal-mcp/entrypoint.py"
+    ]
+  },
+  {
+    "test_case_id": 5,
+    "query": "How are subagents implemented in automator?",
+    "correct": [
+      "automator/automator/agent.py"
+    ]
+  },
+  {
+    "test_case_id": 6,
+    "query": "How do hooks work in automator?",
+    "correct": [
+      "automator/automator/hooks.py",
+      "automator/automator/agent.py"
+    ]
+  },
+  {
+    "test_case_id": 7,
+    "query": "What is the cwd for commands that an agent runs?",
+    "correct": [
+      "automator/automator/workspace.py",
+      "automator/automator/agent.py",
+      "terminal-mcp/entrypoint.py"
+    ]
+  },
+  {
+    "test_case_id": 8,
+    "query": "what should i put in my mcp.json to run terminal-mcp in a docker container?",
+    "correct": [
+      "terminal-mcp/DOCKER_USAGE.md",
+      "mcp.json"
+    ]
+  },
+  {
+    "test_case_id": 9,
+    "query": "how to install the research assistant?",
+    "correct": [
+      "install.py"
+    ]
+  },
+  {
+    "test_case_id": 10,
+    "query": "what is the yaml format that agents can use to evaluate different LLMs?",
+    "correct": [
+      "automator/prompts/evaluator.yaml",
+      "talk-to-model/talk_to_model.py"
+    ]
+  }
+]

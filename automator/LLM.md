@@ -22,3 +22,33 @@ Automator is an MCP-based LLM agent system that enables creating and orchestrati
 ## UI
 - `ui/api` - fastapi based backend (start via `cd ui && uvicorn api.main:app --port 8000`)
 - `ui/frontend` - vite frontend (start via `cd ui/frontend && npm run dev`)
+
+## Testing
+
+The project includes pytest-based tests covering core functionality:
+
+### Test Files
+- `tests/test_quickstart.py` - Tests basic agent creation and terminal tool functionality
+- `tests/test_rag_hook.py` - Tests RAG (Retrieval-Augmented Generation) integration
+- `tests/test_system.py` - Core system functionality including imports and workspace setup
+
+### Running Tests
+```bash
+# Install with dev dependencies
+pip install -e .[dev]
+
+# Run all tests
+pytest
+
+# Run specific test files  
+pytest tests/test_quickstart.py
+pytest tests/test_rag_hook.py
+
+# Run excluding RAG tests (if optional dependencies not installed)
+pytest -m "not rag"
+```
+
+### Test Isolation
+- All tests use temporary directories to avoid affecting actual workspaces
+- RAG tests are automatically skipped if optional `[rag]` dependencies are not installed
+- Tests cover both basic agent functionality and advanced features like RAG hooks

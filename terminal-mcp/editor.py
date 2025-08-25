@@ -11,10 +11,12 @@ import nbformat
 import git
 from PIL import Image as PILImage
 import difflib
+import fitz  # PyMuPDF for PDF processing
 
 from mcp.server.fastmcp import Context, Image
 from mcp.types import TextContent
 from static_code_analysis import analyze_and_format
+from output_manager import truncate_output
 from server import mcp
 
 
@@ -27,6 +29,51 @@ def sanitize_filename(name):
     sanitized = re.sub(r'[.-]{2,}', '_', sanitized)
     # Limit length slightly
     return sanitized[:100]
+
+def convert_single_page_pdf_to_image(pdf_path: str) -> Union[Image, str]:
+    """
+    Convert a single-page PDF to an image.
+    
+    Args:
+        pdf_path: Path to the PDF file
+        
+    Returns:
+        Image object if successful, error string if failed
+    """
+    pdf_document = None
+    try:
+        # Open the PDF document
+        pdf_document = fitz.open(pdf_path)
+        
+        # Check if it's a single page PDF
+        if pdf_document.page_count != 1:
+            return f"Error: PDF has {pdf_document.page_count} pages. Only single-page PDFs are supported for image conversion."
+        
+        # Get the first (and only) page
+        page = pdf_document[0]
+        
+        # Convert page to image (pixmap)
+        # Use a higher DPI for better quality (default is 72, using 150)
+        matrix = fitz.Matrix(150/72, 150/72)  # Scale factor for 150 DPI
+        pix = page.get_pixmap(matrix=matrix)
+        
+        # Convert to PIL Image for consistency with other image handling
+        img_data = pix.tobytes("png")
+        pil_image = PILImage.open(io.BytesIO(img_data))
+        
+        # Convert PIL Image back to bytes for the MCP Image object
+        img_buffer = io.BytesIO()
+        pil_image.save(img_buffer, format='PNG')
+        img_bytes = img_buffer.getvalue()
+        
+        return Image(data=img_bytes, format="png")
+        
+    except Exception as exc:
+        return f"Error converting PDF to image: {exc}"
+    finally:
+        # Always close the PDF document if it was opened
+        if pdf_document is not None:
+            pdf_document.close()
 
 def open_jupyter_notebook(notebook_path: str) -> List[Union[str, Image]]:
     """Return an ordered list of `str` and `Image` blocks for the notebook."""
@@ -181,7 +228,15 @@ def _show_diff_preview(old_content: str, new_content: str, find_string: str) -> 
 
 
 @mcp.tool()
-async def get_file(path: str, ctx: Context = None) -> Union[str, Image, List[Union[str, Image]]]:
+async def get_file(path: str, start_line: int = 0, end_line: int = -1, ctx: Context = None) -> Union[str, Image, List[Union[str, Image]]]:
+    """
+    Open a file. Supported file types: text, image, jupyter notebooks, PDF
+    
+    Args:
+        path: File path to open
+        start_line: Starting line number (0-indexed, only for text files, default: 0)
+        end_line: Ending line number (0-indexed, only for text files, -1 means include all lines, default: -1)
+    """
     workspace = os.path.abspath(".")
     abs_path = os.path.abspath(os.path.normpath(os.path.join(workspace, path)))
 
@@ -193,7 +248,16 @@ async def get_file(path: str, ctx: Context = None) -> Union[str, Image, List[Uni
     if os.path.isdir(abs_path):
         try:
             entries = [e for e in os.listdir(abs_path) if not e.startswith('.')]
-            return "Directory Listing for: " + path + "\n" + "\n".join(entries)
+            listing_text = "Directory Listing for: " + path + "\n" + "\n".join(entries)
+            
+            # Apply truncation if directory listing is very long
+            truncated_listing, full_output_path, was_truncated = truncate_output(listing_text)
+            
+            if was_truncated:
+                find_instructions = f"\n\n[Note: Directory listing was truncated due to length. Full listing saved to {full_output_path}. You can use the find tool to search: find(search_str=\"filename\", path=\"{full_output_path}\")]"
+                truncated_listing += find_instructions
+            
+            return truncated_listing
         except OSError as exc:
             return f"Error listing directory {path}: {exc}"
 
@@ -209,25 +273,95 @@ async def get_file(path: str, ctx: Context = None) -> Union[str, Image, List[Uni
         except Exception as exc:
             return f"Error reading image {path}: {exc}"
 
+    if ext == ".pdf":
+        # Handle PDF files by converting single-page PDFs to images
+        pdf_result = convert_single_page_pdf_to_image(abs_path)
+        if isinstance(pdf_result, str):
+            # Error message returned
+            return pdf_result
+        else:
+            # Image object returned
+            return pdf_result
+
     if ext == ".csv":
         try:
             df = pd.read_csv(abs_path)
             buf = io.StringIO()
             df.info(buf=buf)
-            return f"CSV Info for: {path}\n\n{buf.getvalue()}"
+            csv_info = f"CSV Info for: {path}\n\n{buf.getvalue()}"
+            
+            # Apply truncation if CSV info is very long
+            truncated_info, full_output_path, was_truncated = truncate_output(csv_info)
+            
+            if was_truncated:
+                find_instructions = f"\n\n[Note: CSV info was truncated due to length. Full info saved to {full_output_path}. You can use the find tool to search: find(search_str=\"column_name\", path=\"{full_output_path}\")]"
+                truncated_info += find_instructions
+            
+            return truncated_info
         except Exception as exc:
             return f"Error reading CSV {path}: {exc}"
 
     if ext == ".ipynb":
-        return open_jupyter_notebook(abs_path)
+        nb_blocks = open_jupyter_notebook(abs_path)
+        # If it's a list of blocks, convert to text and apply truncation
+        if isinstance(nb_blocks, list) and len(nb_blocks) > 0:
+            # Convert blocks to text (ignoring images for now)
+            text_blocks = [block for block in nb_blocks if isinstance(block, str)]
+            if text_blocks:
+                nb_text = "\n".join(text_blocks)
+                truncated_nb, full_output_path, was_truncated = truncate_output(nb_text)
+                
+                if was_truncated:
+                    find_instructions = f"\n\n[Note: Notebook content was truncated due to length. Full content saved to {full_output_path}. You can use the find tool to search: find(search_str=\"your_search\", path=\"{full_output_path}\")]"
+                    # Return as a list with truncated text and original images
+                    image_blocks = [block for block in nb_blocks if not isinstance(block, str)]
+                    return [truncated_nb + find_instructions] + image_blocks
+        
+        return nb_blocks
 
     try:
         with open(abs_path, "r", encoding="utf-8") as f:
             text = f.read()
+            
+            # Apply line range filtering for text files
+            if start_line > 0 or end_line != -1:
+                lines = text.split('\n')
+                total_lines = len(lines)
+                
+                # Validate line range
+                if start_line < 0:
+                    return f"Error: start_line must be >= 0, got {start_line}"
+                if start_line >= total_lines:
+                    return f"Error: start_line ({start_line}) exceeds file length ({total_lines} lines)"
+                
+                # Calculate actual end_line (handle -1 for "all lines")
+                actual_end_line = total_lines - 1 if end_line == -1 else end_line
+                
+                if actual_end_line < start_line:
+                    return f"Error: end_line ({actual_end_line}) must be >= start_line ({start_line})"
+                if actual_end_line >= total_lines:
+                    return f"Error: end_line ({actual_end_line}) exceeds file length ({total_lines} lines)"
+                
+                # Extract the requested line range
+                selected_lines = lines[start_line:actual_end_line + 1]
+                text = '\n'.join(selected_lines)
+                
+                # Add line range info to the output
+                range_info = f"[Lines {start_line}-{actual_end_line} of {total_lines} total lines]\n\n"
+                text = range_info + text
+
+            # Apply output truncation with token counting
+            truncated_text, full_output_path, was_truncated = truncate_output(text)
+            
+            # Add find tool instructions if content was truncated
+            if was_truncated:
+                find_instructions = f"\n\n[Note: File content was truncated due to length. Full content saved to {full_output_path}. Use (start_line, end_line) to get specific line ranges or use the find tool to search through the full content: find(search_str=\"your_search\", path=\"{full_output_path}\")]"
+                truncated_text += find_instructions
+            
             return TextContent(
-                text=text,
+                text=truncated_text,
                 type="text",
-                annotations={'display_html': f"<pre>{text}</pre>"}
+                annotations={'display_html': f"<pre>{truncated_text}</pre>"}
             )
     except UnicodeDecodeError:
         return f"Error: Cannot decode file {path} as UTF-8."
@@ -327,7 +461,6 @@ async def edit_file(
     find: str,
     replace: str,
     count: int = 1,
-    auto_indent: bool = True,
     preview: bool = False,
     ctx: Context = None
 ) -> Union[str, TextContent]:
@@ -336,7 +469,7 @@ async def edit_file(
     
     Args:
         path: File path to edit (relative to workspace)
-        find: Exact string to find and replace
+        find: Exact string to find and replace. Include the full string to-be replaced.
         replace: New string content
         count: Number of replacements (1 for first match, -1 for all)
         preview: If True, return preview without making changes
@@ -516,7 +649,16 @@ async def list_codebase_files(
         
 
         files.sort(key=sort_key)
-        return files # Return the list of relative paths
+        
+        # Convert list to string for token counting and potential truncation
+        files_text = "\n".join(files)
+        truncated_files, full_output_path, was_truncated = truncate_output(files_text)
+        
+        if was_truncated:
+            find_instructions = f"\n\n[Note: File list was truncated due to length. Full list saved to {full_output_path}. You can use the find tool to search: find(search_str=\"filename_pattern\", path=\"{full_output_path}\")]"
+            return truncated_files + find_instructions
+        
+        return files_text
 
     except Exception as e:
         # Log the error maybe? ctx.error(...) ?

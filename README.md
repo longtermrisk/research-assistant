@@ -10,3 +10,42 @@ This monorepo contains an implementation of LLM agents that help with research. 
 
 ## Setup
 Run `python install.py` to setup everything up
+
+## Testing
+
+The automator component includes pytest-based tests to verify core functionality:
+
+### Running Tests
+
+```bash
+# Navigate to automator directory
+cd automator
+
+# Install with dev dependencies
+pip install -e .[dev]
+
+# Run all tests
+pytest
+
+# Run specific test files
+pytest tests/test_quickstart.py
+pytest tests/test_rag_hook.py
+
+# Run tests with verbose output
+pytest -v
+
+# Run tests excluding RAG functionality (if dependencies not available)
+pytest -m "not rag"
+```
+
+### Test Coverage
+
+- **test_quickstart.py**: Tests basic agent creation and terminal tool functionality (based on `examples/quickstart.py`)
+- **test_rag_hook.py**: Tests RAG (Retrieval-Augmented Generation) hook functionality (based on `examples/rag/rag_hook_example.py`)
+- **test_system.py**: Tests core system functionality including imports, RAG operations, and workspace setup
+
+### Test Requirements
+
+- Basic tests require only core dependencies
+- RAG tests require the optional `[rag]` dependencies: `pip install -e .[rag]`
+- All tests use temporary directories to avoid affecting your actual workspace

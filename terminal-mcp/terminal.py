@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Tuple
 from mcp.types import TextContent
 import pexpect  # pseudo‑terminal handling
 from utils import clean_ansi 
+from output_manager import truncate_output
 
 from server import mcp
 
@@ -246,5 +247,13 @@ async def _handle_terminal_output(
     if eof:
         sessions[tab_id]["process"] = None
 
-    response = _format_response(cleaned, prompt_seen=prompt_seen, eof=eof, tab_id=tab_id)
+    # Apply output truncation with token counting
+    truncated_output, full_output_path, was_truncated = truncate_output(cleaned)
+    
+    # Add find tool instructions if output was truncated
+    if was_truncated:
+        find_instructions = f"\n\n[Note: You can use the find tool to search through the full output: find(search_str=\"your_search\", path=\"{full_output_path}\")]"
+        truncated_output += find_instructions
+
+    response = _format_response(truncated_output, prompt_seen=prompt_seen, eof=eof, tab_id=tab_id)
     return TextContent(text=response, annotations={'display_html': f"<pre>{response}</pre>"}, type="text")

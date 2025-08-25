@@ -1,0 +1,55 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache
+*.egg-info
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+backend.logs
+frontend.logs
+
+# Node.js (for frontend)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Build artifacts
+dist/
+build/
+
+# Local config files
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.temp
+
+# Documentation that's not needed in container
+*.md
+!DOCKER_README.md

@@ -2,6 +2,69 @@
 
 This file provides guidance to LLMs when working with code in this repository.
 
+## RAG Integration Available
+
+The `rag/` directory contains the Light-RAG system - a lightweight Retrieval-Augmented Generation system inspired by attention mechanisms that can enhance automator agents with contextual document retrieval.
+
+### Key RAG Features
+- **Document ingestion** with OpenAI-powered key generation and summarization
+- **Persistent storage** using FileSystemStore with full serialization
+- **Intelligent reranking** using OpenAI's structured outputs
+- **Hook integration** with automator agents for automatic document retrieval
+- **Context-aware retrieval** based on conversation history
+
+### Automator Integration
+The RAG system has been successfully merged into the main automator repository as a sibling package:
+
+**Directory Structure:**
+```
+automator/
+├── automator/          # Core Python package
+├── rag/                # RAG package (sibling)
+├── ui/                 # Frontend code
+├── examples/rag/       # RAG examples
+├── tests/rag/          # RAG tests
+└── docs/               # Documentation including rag.md
+```
+
+**Installation Options:**
+- `pip install -e .` - Core functionality only
+- `pip install -e .[rag]` - Core + RAG capabilities  
+- `pip install -e .[ui]` - Core + UI build tools
+- `pip install -e .[dev]` - Core + development tools
+- `pip install -e .[all]` - Everything
+
+**RAG Hook Usage:**
+```python
+from automator import Agent
+from rag import create_rag_hook  # Only if [rag] installed
+
+agent = Agent(
+    model="gpt-4.1",
+    hooks=['rag:.knowledge']  # Enable RAG for .knowledge directory
+)
+```
+
+The RAG system automatically:
+1. Ingests documents from specified directories
+2. Retrieves relevant documents based on conversation context  
+3. Adds document content to agent message history
+4. Tracks document relevance across conversation turns
+
+## Recent Improvements - Terminal MCP Server
+
+**Output Management & Search Capabilities** (Latest):
+- **Intelligent Output Truncation**: Added tiktoken-based token counting to automatically truncate outputs > 4k tokens
+  - Keeps first 1k + last 3k tokens with clear truncation indicators
+  - Saves full output to `./tool_output/` with timestamped filenames
+  - Applied to all terminal.py and editor.py functions
+- **Find Tool**: New `find(search_str, path)` tool with glob pattern support
+  - Search through files using patterns like `*.py`, `**/*.js`, `tool_output/*.txt`
+  - Case-insensitive search with highlighted matches and line numbers
+  - Integrated with truncated output workflow for easy access to full content
+- **Files Added**: `output_manager.py`, `find_tool.py`, comprehensive test suite
+- **Files Modified**: All major output functions in terminal.py and editor.py now use smart truncation
+
 ## Repository Architecture
 
 This is a **Research-Assistant** monorepo containing an MCP-based LLM agent system with multiple interconnected components:
@@ -31,13 +94,36 @@ python install.py  # Sets up entire repository including dependencies and MCP co
 # Individual component setup (run in component directory)
 uv sync
 
-# Frontend development (in automator/frontend/)
+# Frontend development (in automator/ui/frontend/)
 npm run dev          # Start development server (localhost:5173)
 npm run build        # Build for production
 npm run lint         # Run ESLint
 
-# Backend development (in automator/)
-uvicorn automator.api.main:app --port 8000  # Start FastAPI server
+# Backend development (in automator/ui)
+uvicorn api.main:app --port 8000  # Start FastAPI server
+```
+
+### Testing
+```bash
+# Navigate to automator directory
+cd automator
+
+# Install with dev dependencies
+pip install -e .[dev]
+
+# Run all tests
+pytest
+
+# Run specific test categories
+pytest tests/test_quickstart.py    # Basic agent and terminal functionality
+pytest tests/test_rag_hook.py      # RAG integration tests (requires [rag] dependencies)
+pytest tests/test_system.py        # Core system tests
+
+# Run with verbose output
+pytest -v
+
+# Run excluding RAG tests if dependencies not available
+pytest -m "not rag"
 ```
 
 ### Agent Usage Examples
@@ -56,12 +142,6 @@ python more_examples/evaluator.py
 ### MCP Server Configuration
 - `mcp.json`: Template for MCP server definitions (gets copied to `~/mcp.json`)
 - Each MCP server runs via: `uv --directory /path/to/server run entrypoint.py`
-
-### Agent Prompt Templates (automator/prompts/)
-- `chatgpt.yaml`: Basic conversational assistant
-- `swe.yaml`: Software engineering focused agent
-- `deep_research.yaml`: Research-oriented agent
-- `evaluator.yaml`: Model evaluation and comparison
 
 ### Environment Setup
 - API keys configured through `~/mcp.json` and propagated to `.env`

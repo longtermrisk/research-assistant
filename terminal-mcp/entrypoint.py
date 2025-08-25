@@ -48,6 +48,7 @@ if __name__ == "__main__":
     from terminal import sessions, AsyncPexpectProcess
     from jupyter import jupyter # noqa: F401 – imported for side effects
     import editor # noqa: F401 – imported for side effects
+    import find_tool # noqa: F401 – imported for side effects
 
     print("Starting Terminal MCP Server…", file=sys.stderr)
     try:
