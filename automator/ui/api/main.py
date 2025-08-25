@@ -322,7 +322,7 @@ async def list_models_api():
     model_set: set[str] = set()
     for prov in providers:
         model_set.update(prov.models)
-    return sorted(model_set)
+    return sorted([m for m in model_set if isinstance(m, str)])
 
 @app.get("/prompts", response_model=List[str])
 async def list_prompts_api():

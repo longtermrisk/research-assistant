@@ -11,11 +11,12 @@ from server import mcp
 def _ensure_venv(path: Path) -> None:
     pyproject_path = path / "pyproject.toml"
     if not pyproject_path.exists():
-        subprocess.run(["uv", "init"], check=True, cwd=path)
+        subprocess.run(["uv", "init", "--python", "python3.12"], check=True, cwd=path)
+
     venv_path = path / ".venv"
     if not venv_path.exists():
-        subprocess.run(["uv", "venv"], check=True, cwd=path)
-    # subprocess.run(["uv", "add", "ipykernel", "pip", "ipython", "jupyterlab", "plotly", "matplotlib"], check=True, cwd=path)
+        subprocess.run(["uv", "venv", "--python", "python3.12"], check=True, cwd=path)
+
     subprocess.run(["uv", "add", "ipykernel", "pip", "ipython", "jupyterlab", "pandas", "matplotlib"], check=True, cwd=path)
 
 
