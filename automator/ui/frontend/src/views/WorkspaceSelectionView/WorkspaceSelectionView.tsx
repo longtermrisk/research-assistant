@@ -59,7 +59,7 @@ const WorkspaceSelectionView: React.FC = () => {
             {workspaces.map((ws) => (
               <li key={ws.name}>
                 <button onClick={() => handleSelectWorkspace(ws.name)} className="workspace-button">
-                  {ws.name} <span className="workspace-path">({ws.path})</span>
+                  {ws.name} <span className="workspace-path">({ws.env.CWD || ws.path})</span>
                 </button>
               </li>
             ))}

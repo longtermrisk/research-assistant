@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import CommandPalette from '../CommandPalette/CommandPalette';
 import * as api from '../../services/api';
 import { ThreadSummary } from '../../types';
 import './AppLayout.css';
@@ -10,8 +11,8 @@ interface AppLayoutProps {
 }
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
-  const { currentWorkspace, clearWorkspace } = useWorkspace();
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const { currentWorkspace } = useWorkspace();
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const navigate = useNavigate();
   const params = useParams<{ workspaceName?: string; threadId?: string }>();
   const location = useLocation(); // To check current path for active thread
@@ -20,6 +21,19 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const [isLoadingThreads, setIsLoadingThreads] = useState<boolean>(false);
 
   const workspaceNameForLinks = currentWorkspace?.name || params.workspaceName;
+
+  // Add keyboard shortcut for command palette
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'P') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(true);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (currentWorkspace && currentWorkspace.name) {
@@ -40,9 +54,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     }
   }, [currentWorkspace, location]); // Re-fetch if workspace changes or location changes (e.g. new thread created and navigated to)
 
-  const handleLogout = () => {
-    clearWorkspace();
-    navigate('/');
+  const handleWorkspaceSwitch = () => {
+    setIsCommandPaletteOpen(true);
   };
 
   if (!workspaceNameForLinks) {
@@ -52,17 +65,16 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   }
 
   return (
-    <div className={`app-layout ${isSidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
+    <div className="app-layout">
       <header className="top-bar">
         <div className="top-bar-left">
-          <button onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} className="sidebar-toggle-btn">
-            {isSidebarExpanded ? '<' : '>'} 
+          <button onClick={handleWorkspaceSwitch} className="workspace-button" title="Switch workspace (Cmd+Shift+P)">
+            <span className="workspace-name">{currentWorkspace?.name || workspaceNameForLinks || 'Workspace'}</span>
+            <span className="workspace-path">{currentWorkspace?.env.CWD || currentWorkspace?.path || ''}</span>
           </button>
-          <span className="workspace-name">{currentWorkspace?.name || workspaceNameForLinks || 'Workspace'}</span>
         </div>
         <div className="top-bar-right">
           <Link to={`/workspace/${workspaceNameForLinks}/agents`} className="nav-button">Agents</Link>
-          <button onClick={handleLogout} className="nav-button logout-button">Switch Workspace</button>
         </div>
       </header>
 
@@ -93,6 +105,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       <main className="main-content">
         {currentWorkspace ? children : <div className="app-layout-info">Loading workspace content...</div>}
       </main>
+
+      <CommandPalette 
+        isOpen={isCommandPaletteOpen} 
+        onClose={() => setIsCommandPaletteOpen(false)} 
+      />
     </div>
   );
 };

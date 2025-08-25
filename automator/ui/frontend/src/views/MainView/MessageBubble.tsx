@@ -35,8 +35,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
 
     console.log(
-        `[MsgBubble] Rendering for originalMsgIndex: ${originalMsgIndex}, msg.id: ${msg.id || 'N/A'
-        }, role: ${msg.role}`
+        `[MsgBubble] Rendering for originalMsgIndex: ${originalMsgIndex}, role: ${msg.role}`
     );
 
     return (
@@ -152,7 +151,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                                     key={`use-${toolUse.id}`}
                                     block={toolUse}
                                     index={0}
-                                    allBlocks={visibleContent}
                                     messages={allMessages}
                                     workspaceName={workspaceName}
                                 />
@@ -161,7 +159,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                                         key={`result-${toolUse.id}`}
                                         block={toolResult}
                                         index={1}
-                                        allBlocks={[]}
                                         messages={allMessages}
                                         workspaceName={workspaceName}
                                     />
@@ -216,7 +213,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                             key={`${block.type}-${(block as any).id || `item-${itemIndex}`}`}
                             block={block}
                             index={itemIndex}
-                            allBlocks={visibleContent}
                             messages={allMessages}
                             workspaceName={workspaceName}
                         />
