@@ -6,6 +6,7 @@ from pathlib import Path
 from collections import defaultdict
 from mcp.types import TextContent
 from server import mcp
+import git
 
 try:
     from isignored import is_ignored
@@ -24,11 +25,15 @@ def is_binary_file(file_path: str) -> bool:
         return True  # If we can't read it, assume it's binary
 
 
-def should_skip_file(file_path: str) -> bool:
-    """Check if a file should be skipped (binary, ignored, etc.)."""
+def should_skip_file_for_ignore(file_path: str) -> bool:
+    """Check if a file should be skipped based on gitignore rules."""
     if HAS_ISIGNORED and is_ignored(file_path):
         return True
-    
+    return False
+
+
+def should_skip_file_for_binary(file_path: str) -> bool:
+    """Check if a file should be skipped because it's binary."""
     if is_binary_file(file_path):
         return True
         
@@ -41,6 +46,134 @@ def should_skip_file(file_path: str) -> bool:
         return True
         
     return False
+
+
+def get_files_from_directory(dir_path: str, workspace: str) -> List[str]:
+    """
+    Get all non-ignored files from a directory using git-aware logic.
+    Similar to list_codebase_files but returns absolute paths.
+    """
+    full_dir_path = os.path.abspath(dir_path)
+    
+    # Security check
+    if not full_dir_path.startswith(workspace):
+        return []
+    
+    if not os.path.isdir(full_dir_path):
+        return []
+
+    files = []
+    try:
+        repo = None
+        
+        # Check if it's a git repo to use .gitignore
+        try:
+            repo = git.Repo(full_dir_path, search_parent_directories=True)
+            repo_dir = repo.working_tree_dir
+            
+            # Only use gitignore if the requested path is within the repo tree
+            if full_dir_path.startswith(repo_dir):
+                # Get all items, check ignore status relative to repo root
+                all_items_in_path = []
+                for root, dirs, filenames in os.walk(full_dir_path):
+                    for filename in filenames:
+                        file_path = os.path.join(root, filename)
+                        all_items_in_path.append(file_path)
+
+                # Get ignored paths relative to repo root
+                repo_relative_paths = [os.path.relpath(p, repo_dir) for p in all_items_in_path if os.path.exists(p)]
+                ignored_repo_paths = set(repo.ignored(*repo_relative_paths))
+
+                # Collect non-ignored files
+                for root, dirs, filenames in os.walk(full_dir_path, topdown=True):
+                    current_rel_root_to_repo = os.path.relpath(root, repo_dir)
+                    
+                    # Filter dirs: ignore if dir itself (relative to repo) is ignored
+                    dirs[:] = [d for d in dirs if os.path.normpath(os.path.join(current_rel_root_to_repo, d)) not in ignored_repo_paths and not d.startswith('.')]
+
+                    for filename in filenames:
+                        if filename.startswith('.'):
+                            continue  # Skip hidden files
+                        
+                        file_rel_path_to_repo = os.path.normpath(os.path.join(current_rel_root_to_repo, filename))
+                        if file_rel_path_to_repo not in ignored_repo_paths and not filename.endswith('.lock'):
+                            files.append(os.path.join(root, filename))
+                            
+                repo_processed = True
+            else:
+                repo = None
+                repo_processed = False
+        except (git.InvalidGitRepositoryError, Exception):
+            repo = None
+            repo_processed = False
+
+        if not repo_processed:  # Fallback for non-git dirs or if git failed
+            # Basic ignore: .git, node_modules, __pycache__
+            ignored_dirs = {'.git', 'node_modules', '__pycache__'}
+            for root, dirs, filenames in os.walk(full_dir_path, topdown=True):
+                # Exclude ignored and hidden dirs
+                dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ignored_dirs]
+                for filename in filenames:
+                    if not filename.startswith('.') and not filename.endswith('.lock'):
+                        files.append(os.path.join(root, filename))
+
+    except Exception as e:
+        print(f"Error listing files in directory '{dir_path}': {e}")
+        return []
+    
+    return files
+
+
+def get_files_from_glob_pattern(pattern: str, workspace: str) -> List[str]:
+    """
+    Get all files matching a glob pattern, filtered by gitignore rules.
+    """
+    try:
+        # Use glob to find matching files
+        matched_files = glob.glob(pattern, recursive=True)
+        # Filter to only include files (not directories)
+        matched_files = [f for f in matched_files if os.path.isfile(f)]
+        
+        # Filter out ignored files
+        non_ignored_files = []
+        for file_path in matched_files:
+            abs_file_path = os.path.abspath(file_path)
+            
+            # Security check: ensure file is within workspace or tool_output
+            tool_output_dir = os.path.abspath("./tool_output")
+            if not (abs_file_path.startswith(workspace) or abs_file_path.startswith(tool_output_dir)):
+                continue
+            
+            # Check if file should be ignored
+            if not should_skip_file_for_ignore(file_path):
+                non_ignored_files.append(abs_file_path)
+        
+        return non_ignored_files
+    except Exception as e:
+        print(f"Error processing glob pattern '{pattern}': {e}")
+        return []
+
+
+def determine_path_type(path: str) -> str:
+    """
+    Determine if the path is a specific file, directory, or glob pattern.
+    Returns: 'file', 'directory', or 'glob'
+    """
+    # Check if it's a specific existing file
+    if os.path.isfile(path):
+        return 'file'
+    
+    # Check if it's an existing directory
+    if os.path.isdir(path):
+        return 'directory'
+    
+    # Check if it contains glob characters
+    if any(char in path for char in ['*', '?', '[', ']', '**']):
+        return 'glob'
+    
+    # If it doesn't exist and has no glob chars, treat as potential file
+    # (could be a typo or non-existent file)
+    return 'file'
 
 
 def search_in_file(file_path: str, search_str: str, context: int = 0, 
@@ -60,7 +193,7 @@ def search_in_file(file_path: str, search_str: str, context: int = 0,
     """
     matches = []
     
-    if should_skip_file(file_path):
+    if should_skip_file_for_binary(file_path):
         return []
     
     try:
@@ -174,11 +307,11 @@ def format_file_matches(file_path: str, matches: List[Tuple[int, str, List[str]]
 async def find(search_str: str, path: str, context: int = 0, files_only: bool = False, 
                max_line_length: int = 200, group_by_type: bool = False) -> TextContent:
     """
-    Search for a string in files. The path can be a specific file or a glob pattern.
+    Search for a string in files. The path can be a specific file, directory, or glob pattern.
     
     Args:
         search_str: String to search for (case-insensitive)
-        path: File path or glob pattern (e.g., "*.py", "src/**/*.js", "tool_output/output_*.txt")
+        path: File path, directory path, or glob pattern (e.g., "*.py", "src/**/*.js", "tool_output/output_*.txt")
         context: Number of context lines to show before/after each match (default: 0)
         files_only: If True, only show filenames without match content (default: False)
         max_line_length: Maximum line length before truncation (default: 200)
@@ -193,27 +326,35 @@ async def find(search_str: str, path: str, context: int = 0, files_only: bool = 
     # Handle relative paths
     workspace = os.path.abspath(".")
     
-    # If path is absolute, use it directly; otherwise make it relative to workspace
+    # Make path absolute if it's relative
     if os.path.isabs(path):
         search_path = path
     else:
         search_path = os.path.join(workspace, path)
     
-    # Use glob to find matching files
-    try:
+    # Determine path type and get files accordingly
+    path_type = determine_path_type(search_path)
+    
+    files_to_search = []
+    
+    if path_type == 'file':
+        # Specific file - don't check if it's ignored per requirement
         if os.path.isfile(search_path):
-            # Direct file path
             files_to_search = [search_path]
         else:
-            # Glob pattern
-            files_to_search = glob.glob(search_path, recursive=True)
-            # Filter to only include files (not directories)
-            files_to_search = [f for f in files_to_search if os.path.isfile(f)]
-    except Exception as e:
-        return f"Error processing path pattern '{path}': {e}"
+            return f"File not found: {path}"
     
-    if not files_to_search:
-        return f"No files found matching pattern: {path}"
+    elif path_type == 'directory':
+        # Directory - include all non-ignored files in that directory
+        files_to_search = get_files_from_directory(search_path, workspace)
+        if not files_to_search:
+            return f"No accessible files found in directory: {path}"
+    
+    elif path_type == 'glob':
+        # Glob pattern - include all non-ignored files that match the pattern
+        files_to_search = get_files_from_glob_pattern(search_path, workspace)
+        if not files_to_search:
+            return f"No files found matching pattern: {path}"
     
     # Search in each file
     matches_per_file = {}
@@ -222,30 +363,29 @@ async def find(search_str: str, path: str, context: int = 0, files_only: bool = 
     skipped_files = 0
     
     for file_path in files_to_search:
-        # Security check: ensure file is within workspace or tool_output
-        abs_file_path = os.path.abspath(file_path)
-        tool_output_dir = os.path.abspath("./tool_output")
-        
-        if not (abs_file_path.startswith(workspace) or abs_file_path.startswith(tool_output_dir)):
-            continue  # Skip files outside allowed directories
-        
-        # Skip binary/ignored files
-        if should_skip_file(file_path):
-            skipped_files += 1
-            continue
+        # For specific files, don't check ignore status
+        # For directories and globs, ignore status was already checked
+        if path_type == 'file' or not should_skip_file_for_ignore(file_path):
+            # Always skip binary files regardless of path type
+            if should_skip_file_for_binary(file_path):
+                skipped_files += 1
+                continue
+                
+            total_files_searched += 1
+            matches = search_in_file(file_path, search_str, context=context, max_line_length=max_line_length)
             
-        total_files_searched += 1
-        matches = search_in_file(file_path, search_str, context=context, max_line_length=max_line_length)
-        
-        if matches:
-            files_with_matches += 1
-            # Make path relative for display
-            display_path = os.path.relpath(file_path, workspace) if file_path.startswith(workspace) else file_path
-            matches_per_file[display_path] = matches
+            if matches:
+                files_with_matches += 1
+                # Make path relative for display
+                display_path = os.path.relpath(file_path, workspace) if file_path.startswith(workspace) else file_path
+                matches_per_file[display_path] = matches
+        else:
+            skipped_files += 1
     
     if not matches_per_file:
         skip_msg = f" ({skipped_files} files skipped - binary/ignored)" if skipped_files > 0 else ""
-        return f"No matches found for '{search_str}' in {total_files_searched} file(s) matching pattern '{path}'{skip_msg}"
+        path_type_desc = "file" if path_type == 'file' else f"{total_files_searched + skipped_files} files"
+        return f"No matches found for '{search_str}' in {path_type_desc} at '{path}'{skip_msg}"
     
     # Format results
     skip_msg = f" ({skipped_files} skipped)" if skipped_files > 0 else ""

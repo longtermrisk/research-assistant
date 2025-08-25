@@ -17,9 +17,9 @@ def count_tokens(text: str, encoding: str = "cl100k_base") -> int:
 
 def truncate_output(
     output: str, 
-    max_tokens: int = 4000,
-    head_tokens: int = 1000,
-    tail_tokens: int = 3000
+    max_tokens: int = 10000,
+    head_tokens: int = 5000,
+    tail_tokens: int = 5000
 ) -> Tuple[str, str, bool]:
     """
     Truncate output if it exceeds max_tokens.
