@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout/AppLayout';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import * as api from '../../services/api';
 import {
   ApiChatMessage, ThreadDetail, Agent,
-  ContentBlock, MessageRole, TextBlock, ToolUseBlock, ToolResultBlock, ImageBlock, Base64ImageSource, FileSystemItem
+  ContentBlock, MessageRole, TextBlock, ToolUseBlock, ToolResultBlock, Base64ImageSource, FileSystemItem
 } from '../../types';
 import './MainView.css';
 import { getMessagesSSE } from '../../services/api';
@@ -85,6 +85,14 @@ const MainView: React.FC = () => {
 
   useEffect(() => {
     if (currentWorkspace && currentWorkspace.name && workspaceName) {
+      // Clear thread state when workspace changes
+      if (!threadId) {
+        setCurrentThread(null);
+        setMessages([]);
+        setSelectedAgentForNewThread(null);
+        setError(null);
+      }
+      
       setIsLoadingFiles(true);
       api
         .listWorkspaceFiles(workspaceName)
@@ -106,7 +114,7 @@ const MainView: React.FC = () => {
           setError((prev) => prev || 'Failed to load agents: ' + err.message);
         });
     }
-  }, [currentWorkspace, workspaceName]);
+  }, [currentWorkspace, workspaceName, threadId]);
 
   useEffect(() => {
     if (!currentWorkspace || !workspaceName) return;
@@ -121,7 +129,7 @@ const MainView: React.FC = () => {
           
           // Check if the last message indicates the agent might still be processing
           const lastMessage = threadDetails.messages?.[threadDetails.messages.length - 1];
-          if (lastMessage && lastMessage.role === MessageRole.assistant) {
+          if (lastMessage && lastMessage.role === MessageRole.Assistant) {
             const hasToolUse = lastMessage.content.some(block => block.type === 'tool_use');
             if (hasToolUse) {
               setIsAgentProcessing(true); // Agent might still be processing tool results
@@ -141,7 +149,7 @@ const MainView: React.FC = () => {
         const newMessageData = JSON.parse(event.data) as ApiChatMessage;
         
         // Check if this is an assistant message that indicates processing is complete
-        if (newMessageData.role === MessageRole.assistant) {
+        if (newMessageData.role === MessageRole.Assistant) {
           // If the assistant message has no tool_use blocks, the agent is likely done processing
           const hasToolUse = newMessageData.content.some(block => block.type === 'tool_use');
           console.log(`[SSE] Assistant message received, hasToolUse: ${hasToolUse}`);
@@ -294,7 +302,6 @@ const MainView: React.FC = () => {
           if (
             nextMessage &&
             nextMessage.role === MessageRole.User
-            // Removed: nextMessage.content.every((c) => c.type === 'tool_result')
           ) {
             const resultBlock = nextMessage.content.find(
               (b) => b.type === 'tool_result' && (b as ToolResultBlock).tool_use_id === (block as ToolUseBlock).id
@@ -415,36 +422,20 @@ const MainView: React.FC = () => {
 
         <div className="messages-area" ref={chatContainerRef} onScroll={handleScroll}>
           {processedMessages.map((msg, processedMsgIndex) => {
-            const idToFind = msg.id;
-            let originalMsgRef: ApiChatMessage | undefined = undefined;
-            const originalMsgIndex = messages.findIndex((originalMsg, idx) => {
-              const idMatch = idToFind !== undefined && idToFind !== null && originalMsg.id === idToFind;
-              const refMatch = originalMsg === msg; // Check by reference if IDs are not reliable
-              if (idMatch || refMatch) {
-                originalMsgRef = originalMsg;
-                return true;
-              }
-              return false;
-            });
-
-            console.log(
-              `[MainView.map] ProcessedMsg (idx ${processedMsgIndex}, role ${msg.role}, id ${idToFind || 'N/A'}, content: ${msg.content.length} items) -> ` +
-              `originalMsgIndex: ${originalMsgIndex}, originalMsg.id: ${originalMsgRef?.id || 'N/A'}`
-            );
+            // Find the original message index by reference since ApiChatMessage doesn't have an id
+            const originalMsgIndex = messages.findIndex((originalMsg) => originalMsg === msg);
 
             if (originalMsgIndex === -1) {
-              console.warn('[MainView.map] Could not find original message for processed message:', JSON.parse(JSON.stringify(msg)));
-              // Decide how to handle this: skip rendering, or render with a default index?
-              // For now, skipping to avoid passing -1 as originalMsgIndex which would break array lookups.
+              console.warn('[MainView.map] Could not find original message for processed message');
               return null; 
             }
 
             return (
               <MessageBubble
-                key={idToFind || `msg-${processedMsgIndex}-${originalMsgIndex}`} // Improved key for robustness
-                msg={msg} // Pass the message from processedMessages
-                originalMsgIndex={originalMsgIndex} // Crucial: the index in the *original* messages array
-                allMessages={messages} // Pass the full, unfiltered messages array for context
+                key={`msg-${processedMsgIndex}-${originalMsgIndex}`}
+                msg={msg}
+                originalMsgIndex={originalMsgIndex}
+                allMessages={messages}
                 workspaceName={workspaceName}
                 copiedMessageIndex={copiedMessageIndex}
                 onCopyMessage={handleCopyMessage}

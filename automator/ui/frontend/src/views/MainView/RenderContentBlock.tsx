@@ -17,19 +17,15 @@ import {
 export interface RenderContentBlockProps {
   block: ContentBlock;
   index: number;
-  allBlocks: ContentBlock[];
   messages: ApiChatMessage[];
   workspaceName?: string;
-  insideToolResultBlock?: boolean;
 }
 
 export const RenderContentBlock: React.FC<RenderContentBlockProps> = ({
   block,
   index,
-  allBlocks,
   messages,
   workspaceName,
-  insideToolResultBlock = false,
 }) => {
   if (block.meta && block.meta.hidden === true) {
     return null;
@@ -174,10 +170,8 @@ export const RenderContentBlock: React.FC<RenderContentBlockProps> = ({
               key={idx}
               block={contentItem}
               index={idx}
-              allBlocks={toolResultBlock.content}
               messages={messages}
               workspaceName={workspaceName}
-              insideToolResultBlock={true}
             />
           ))}
         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useRef, useCallback } from 'react';
 import FileMentionInput from './FileMentionInput/FileMentionInput';
 import { FileSystemItem } from '../../types';
 import './MainView.css';
@@ -76,7 +76,7 @@ const MessageInputArea: React.FC<MessageInputAreaProps> = ({
             return { id: `${file.name}-${Date.now()}`, file, base64, media_type: file.type };
           })
         );
-        setAttachedImages((prev) => [...prev, ...newAttachedImages]);
+        setAttachedImages(prev => [...prev, ...newAttachedImages]);
       } catch (err) {
         console.error('Error processing images:', err);
       }
@@ -85,7 +85,7 @@ const MessageInputArea: React.FC<MessageInputAreaProps> = ({
   );
 
   const handleRemoveImage = (idToRemove: string) => {
-    setAttachedImages((prev) => prev.filter((img) => img.id !== idToRemove));
+    setAttachedImages(prev => prev.filter(img => img.id !== idToRemove));
   };
 
   const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {

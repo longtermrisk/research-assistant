@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { FileSystemItem } from '../../types';
+import { FileSystemItem } from '../../../types';
 import styles from './FileMentionInput.module.css';
 
 interface FileMentionInputProps {

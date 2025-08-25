@@ -16,7 +16,7 @@ dependencies = [
     "pandas>=2.2.3",
     "matplotlib>=3.10.3",
     "watchdog>=6.0.0",
-    "localrouter>=0.2.4",
+    "localrouter>=0.2.5",
     "isignored>=0.1.1",
 ]
 

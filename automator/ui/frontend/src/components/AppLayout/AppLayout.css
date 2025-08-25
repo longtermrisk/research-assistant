@@ -4,15 +4,10 @@
     'header header'
     'sidebar main';
   grid-template-rows: auto 1fr;
-  grid-template-columns: 250px 1fr; /* Default sidebar width */
+  grid-template-columns: 250px 1fr; /* Fixed sidebar width */
   height: 100vh;
   background-color: var(--background-primary);
   color: var(--foreground-primary);
-  transition: grid-template-columns 0.3s ease-in-out;
-}
-
-.app-layout.sidebar-collapsed {
-  grid-template-columns: 50px 1fr; /* Collapsed sidebar width */
 }
 
 /* Top Bar */
@@ -30,20 +25,43 @@
 .top-bar-left {
   display: flex;
   align-items: center;
+  flex: 1;
 }
 
-.sidebar-toggle-btn {
+.workspace-button {
   background: none;
   border: none;
   color: var(--foreground-primary);
-  font-size: 1.5em;
-  margin-right: 15px;
   cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 4px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  transition: background-color 0.15s ease;
+}
+
+.workspace-button:hover {
+  background-color: var(--background-hover);
 }
 
 .workspace-name {
   font-size: 1.1em;
   font-weight: 500;
+  line-height: 1.2;
+}
+
+.workspace-path {
+  font-size: 0.85em;
+  color: var(--foreground-secondary);
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  line-height: 1.2;
+  margin-top: 2px;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .top-bar-right {
@@ -77,40 +95,6 @@
   border-right: 1px solid var(--border-primary);
   padding: 10px;
   overflow-y: auto;
-  transition: width 0.3s ease-in-out, padding 0.3s ease-in-out;
-}
-
-.app-layout.sidebar-collapsed .left-sidebar {
-  padding: 10px 5px; /* Adjust padding for collapsed state */
-}
-
-.app-layout.sidebar-collapsed .sidebar-content {
-  overflow: hidden;
-}
-
-.app-layout.sidebar-collapsed .new-thread-button span,
-.app-layout.sidebar-collapsed .sidebar-heading,
-.app-layout.sidebar-collapsed .thread-item span,
-.app-layout.sidebar-collapsed .loading-text,
-.app-layout.sidebar-collapsed .no-threads-text {
-  display: none; /* Hide text content when collapsed */
-}
-
-.app-layout.sidebar-collapsed .new-thread-button::before {
-  content: "+"; /* Placeholder for icon */
-  font-size: 1.5rem; 
-  display: block;
-  text-align: center;
-  line-height: 20px; /* Adjust if button size changes */
-}
-
-/* Style for thread items when collapsed (e.g., show a dot or tiny icon) */
-.app-layout.sidebar-collapsed .thread-item::before {
-  content: "●"; /* Example: a small dot */
-  font-size: 0.8rem;
-  display: block;
-  text-align: center;
-  padding: 8px 0;
 }
 
 .new-thread-button {

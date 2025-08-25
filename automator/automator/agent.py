@@ -25,8 +25,7 @@ from localrouter import (
     PromptTemplate,
     ChatMessage,
     MessageRole,
-    get_response
-    # get_response_with_backoff as get_response
+    get_response_with_backoff as get_response
 )
 from automator.hooks import load_hooks, _HOOKS
 

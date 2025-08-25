@@ -1,6 +1,7 @@
 :root {
   /* Dark Theme Inspired by VS Code */
   --background-primary: #1e1e1e; /* Editor background */
+  --background-primary-rgb: 30, 30, 30; /* RGB version for rgba() usage */
   --background-secondary: #252526; /* Activity bar, status bar */
   --background-tertiary: #333333; /* Side bar, panel headers */
   --background-hover: #2a2d2e; /* Hover on list items */
@@ -10,8 +11,11 @@
   --foreground-secondary: #858585; /* Dimmed text, comments */
   --foreground-accent: #007acc; /* Links, active elements */
 
+  --border-color: #3c3c3c; /* For command palette */
   --border-primary: #3c3c3c;
   --border-secondary: #555555;
+
+  --accent-primary: #007acc; /* For command palette current item */
 
   --button-primary-background: #0e639c;
   --button-primary-foreground: #ffffff;
